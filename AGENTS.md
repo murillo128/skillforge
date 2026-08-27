@@ -6,6 +6,8 @@ Repository-wide instructions for ChatGPT, Codex, and other development agents.
 
 The project's durable mission and product/domain scope belong in `README.md` and the repository documentation that explicitly owns them.
 
+When a repository is created from this template, adapt or replace `README.md` before treating the repository as initialized for normal project work. The project README must describe the actual project's mission and scope rather than retaining template-oriented text as if it were project documentation.
+
 Agents must not broaden the project, invent adjacent goals, or promote exploratory discussion into settled scope without an explicit repository or issue-level decision.
 
 This file owns repository-wide agent invariants and routes work to reusable skills. It should remain compact. Do not duplicate detailed procedures here when a skill already owns them.
@@ -134,7 +136,7 @@ Do not mix GitHub bookkeeping into technical evidence unless that metadata is it
 
 ## Project-specific additions
 
-Repositories created from this template should add only the domain-specific invariants that genuinely apply to that project, for example:
+Repositories created from this template should first adapt `README.md` to the concrete project, then add only the domain-specific invariants that genuinely apply to that project, for example:
 
 - language/runtime and coding constraints;
 - ownership, lifetime, concurrency, or security invariants;
