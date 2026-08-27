@@ -5,19 +5,27 @@ A reusable GitHub repository template for skill-driven agentic software developm
 Skillforge separates project concerns deliberately:
 
 - `AGENTS.md` — repository-wide agent invariants and skill routing;
-- `skills/` — reusable development, execution, review, GitHub, orchestration, and wiki-curation procedures;
+- `skills/` — reusable development, execution, review, GitHub, orchestration, wiki-curation, and one-time bootstrap procedures;
 - `docs/` and other project documentation — deliberate/normative project knowledge when the project defines it as such;
 - `wiki/` — optional agent-generated derived project memory, created and organized by the repository curator;
 - GitHub issues — task-specific contracts and actionable findings.
 
 ## Starting a project
 
-When creating a repository from this template:
+When creating a repository from this template, run `skills/repository-bootstrap/SKILL.md` **once** before normal non-trivial project work.
 
-1. **Replace or rewrite this `README.md`** so it describes the new project's actual mission, scope, architecture, setup, and user-facing documentation. Do not leave the Skillforge template README as the project's README.
-2. Adapt the `Project-specific additions` section of `AGENTS.md` with only the repository-wide invariants the new project genuinely needs.
-3. Add project-specific or domain-specific skills only when a procedure is genuinely reusable; keep task-specific instructions in controlling GitHub issues.
-4. If enabling periodic repository wiki curation, ensure the GitHub label `curator-detected` exists and configure a separate scheduled curator task for that repository.
+The bootstrap:
+
+1. verifies or creates the required Skillforge workflow labels plus `curator-detected`;
+2. replaces this template README with the actual project's README;
+3. adapts `AGENTS.md` with only established project-specific repository invariants;
+4. performs a hard scope check so bootstrap cannot touch unrelated project files;
+5. commits the completed initialization directly to the default branch as one coherent bootstrap commit;
+6. deletes `skills/repository-bootstrap/` and removes its own references from `AGENTS.md` and `README.md`.
+
+A failed or incomplete bootstrap must **not** self-remove, so it can be retried safely. The canonical `murillo128/skillforge` template repository itself must retain the bootstrap skill and must never execute it.
+
+After bootstrap, the new repository should no longer contain Skillforge bootstrap instructions: its README and agent instructions should describe the actual project.
 
 ## Optional derived wiki
 
