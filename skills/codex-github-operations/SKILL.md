@@ -46,6 +46,52 @@ Before relying on issue state, verify that exactly one state label is present. R
 
 During a Codex implementation workflow, `completed` is not an executor-controlled transition. Keep the issue `in-progress` through the ready-for-review handoff. Set `completed` and close the issue only after a later explicit user-facing merge decision has been executed and the merge is observed.
 
+## Commit messages
+
+All commits created by agents must use **Conventional Commits** syntax:
+
+```text
+<type>(<optional-scope>): <imperative summary>
+```
+
+The scope is optional. A breaking change may use `!` before the colon when appropriate, for example `feat(api)!: remove legacy endpoint`.
+
+Use one of these commit types unless the repository explicitly extends the allowed set:
+
+- `feat` — new user-visible or system capability;
+- `fix` — bug fix or correctness repair;
+- `refactor` — internal restructuring without intended behavior change;
+- `perf` — performance improvement;
+- `test` — test-only changes;
+- `docs` — documentation-only changes;
+- `build` — build-system or dependency-build changes;
+- `ci` — CI/CD workflow changes;
+- `chore` — maintenance that does not fit another type;
+- `style` — formatting/style-only changes with no semantic effect;
+- `revert` — revert of a prior change.
+
+Rules:
+
+- use lowercase commit types;
+- write the summary in imperative mood and describe one intentional outcome;
+- keep the first line concise and specific;
+- prefer a meaningful scope when it materially improves identification, but do not invent scopes mechanically;
+- do not use vague summaries such as `update files`, `changes`, `fix stuff`, or `misc`;
+- do not combine unrelated outcomes merely to reduce commit count;
+- use a body only when additional rationale, compatibility notes, or non-obvious context is materially useful.
+
+Examples:
+
+```text
+feat(quic): add packet protection key state
+fix(cache): reject stale slot generations
+docs: add architecture overview
+refactor(runtime): isolate request scheduling
+ci: add sanitizer workflow
+```
+
+If an existing repository defines a stricter commit convention, follow the stricter repository rule while retaining Conventional Commits compatibility where possible.
+
 ## Publish a branch
 
 Before publication:
