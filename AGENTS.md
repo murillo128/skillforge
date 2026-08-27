@@ -10,6 +10,16 @@ Agents must not broaden the project, invent adjacent goals, or promote explorato
 
 This file owns repository-wide agent invariants and routes work to reusable skills. It should remain compact. Do not duplicate detailed procedures here when a skill already owns them.
 
+## One-time template bootstrap
+
+This section exists only in the canonical Skillforge template and in repositories that have not yet completed initialization.
+
+- Never execute `repository-bootstrap` inside the canonical `murillo128/skillforge` template repository itself.
+- In a repository created from this template, the presence of `skills/repository-bootstrap/SKILL.md` means initialization is incomplete.
+- Before normal non-trivial project work begins, run that skill once with the actual project mission, scope, and established repository constraints available.
+- A successful bootstrap must configure the required GitHub labels, make `README.md` project-specific, adapt repository-specific `AGENTS.md` invariants, delete `skills/repository-bootstrap/`, and remove this bootstrap section plus its routing entry.
+- If bootstrap cannot complete safely, it must remain installed so the initialization can be retried.
+
 ## Load context progressively
 
 For non-trivial work, start with:
@@ -51,6 +61,7 @@ Skills define reusable **procedure**, not project state or product truth. Issues
 
 Load skills lazily by role:
 
+- one-time repository initialization: `skills/repository-bootstrap/SKILL.md`;
 - design authority: `skills/design-github-issue/SKILL.md`;
 - main executor: `skills/spec-driven-codex-loop/SKILL.md`;
 - Git and GitHub mutation/publication: `skills/codex-github-operations/SKILL.md`;
