@@ -91,7 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v codex >/dev/null
-          command -v script >/dev/null
+          command -v python3 >/dev/null
           command -v setsid >/dev/null
 
           repo_key="${GITHUB_REPOSITORY//\//-}"
@@ -99,6 +99,7 @@ jobs:
           log_dir="${SKILLFORGE_LOG_ROOT:-${HOME}/.skillforge/logs}/${repo_key}"
           pid_file="${state_dir}/codex.pid"
           launcher="${state_dir}/launch-codex.sh"
+          pty_runner="${state_dir}/pty-runner.py"
           log_file="${log_dir}/issue-${ISSUE_NUMBER}-${GITHUB_RUN_ID}.log"
           mkdir -p "$state_dir" "$log_dir"
 
@@ -116,6 +117,9 @@ jobs:
           set -euo pipefail
           unset CI GITHUB_ACTIONS GH_TOKEN GITHUB_TOKEN
           export RUNNER_TRACKING_ID=""
+          if [ -z "${TERM:-}" ] || [ "${TERM:-}" = "dumb" ]; then
+            export TERM=xterm-256color
+          fi
           exec codex --ask-for-approval on-request \
             --cd "$SKILLFORGE_ISSUE_WORKTREE" \
             --no-alt-screen \
@@ -126,8 +130,75 @@ jobs:
           EOF
           chmod 700 "$launcher"
 
-          launcher_cmd="$(printf '%q' "$launcher")"
-          RUNNER_TRACKING_ID="" nohup setsid -w script -qefc "$launcher_cmd" "$log_file" </dev/null >/dev/null 2>&1 &
+          cat > "$pty_runner" <<'PY'
+          #!/usr/bin/env python3
+          import errno
+          import os
+          import pty
+          import select
+          import signal
+          import sys
+
+          if len(sys.argv) < 3:
+              raise SystemExit("usage: pty-runner.py LOG COMMAND [ARG ...]")
+
+          log_path = sys.argv[1]
+          command = sys.argv[2:]
+          child_pid, master_fd = pty.fork()
+          if child_pid == 0:
+              os.execvp(command[0], command)
+
+          def forward(signum, _frame):
+              try:
+                  os.kill(child_pid, signum)
+              except ProcessLookupError:
+                  pass
+
+          signal.signal(signal.SIGTERM, forward)
+          signal.signal(signal.SIGINT, forward)
+          status = None
+
+          with open(log_path, "ab", buffering=0) as log:
+              while status is None:
+                  try:
+                      readable, _, _ = select.select([master_fd], [], [], 0.5)
+                  except InterruptedError:
+                      continue
+
+                  if readable:
+                      try:
+                          data = os.read(master_fd, 65536)
+                      except OSError as exc:
+                          if exc.errno != errno.EIO:
+                              raise
+                          data = b""
+                      if data:
+                          log.write(data)
+
+                  done, child_status = os.waitpid(child_pid, os.WNOHANG)
+                  if done == child_pid:
+                      status = child_status
+
+              while True:
+                  try:
+                      readable, _, _ = select.select([master_fd], [], [], 0)
+                      if not readable:
+                          break
+                      data = os.read(master_fd, 65536)
+                  except OSError as exc:
+                      if exc.errno == errno.EIO:
+                          break
+                      raise
+                  if not data:
+                      break
+                  log.write(data)
+
+          os.close(master_fd)
+          raise SystemExit(os.waitstatus_to_exitcode(status))
+          PY
+          chmod 700 "$pty_runner"
+
+          RUNNER_TRACKING_ID="" nohup setsid -w python3 "$pty_runner" "$log_file" "$launcher" >/dev/null 2>>"$log_file" &
           codex_pid=$!
           printf '%s\n' "$codex_pid" > "$pid_file"
           printf '%s\n' "$log_file" > "${state_dir}/latest-log"
