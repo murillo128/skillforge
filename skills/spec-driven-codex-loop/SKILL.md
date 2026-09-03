@@ -28,6 +28,31 @@ Do not silently promote exploratory notes, hypotheses, brainstorming, or provisi
 
 On resume, verify branch, `HEAD`, worktree, the controlling issue's single authoritative state label, and new material issue or PR discussion since the last handoff. Reuse unchanged inspected context rather than replaying history.
 
+## Skillforge local-runner entry
+
+When `SKILLFORGE_LOCAL_RUNNER=1`, the launcher has already established the executor's repository isolation before Codex starts.
+
+Treat the supplied local-runner context as an execution lease:
+
+- current working directory must resolve to `SKILLFORGE_ISSUE_WORKTREE`;
+- current branch must equal `SKILLFORGE_ISSUE_BRANCH`, normally `codex/issue-N`;
+- that worktree/branch belongs to the controlling issue for this execution;
+- a retry may contain unfinished state from an earlier attempt and must inspect/adopt it deliberately rather than replacing it.
+
+Before editing, fail closed if the working directory, branch, repository identity, or controlling issue does not match that lease.
+
+Do **not** create another worktree, switch to the durable coordination clone, switch to the default branch, invent a second implementation branch, or reset/discard pre-existing issue work merely because the session was launched by automation. The persistent issue worktree is the correct workspace.
+
+The local-runner GitHub Actions job ends shortly after launching this interactive Codex session. Therefore:
+
+- Actions job success means only that the session was launched, not that the issue succeeded;
+- do not depend on `GH_TOKEN`, `GITHUB_TOKEN`, `CI`, or `GITHUB_ACTIONS` being present;
+- those Actions-specific variables are intentionally removed from the detached session;
+- Git/GitHub operations must use the persistent host transports described by `codex-github-operations`;
+- do not attempt to recover, persist, or reuse an Actions job token from runner state or logs.
+
+This local-runner entry changes only workspace/control-plane mechanics. Scope, validation, review, PR, and merge rules remain exactly the normal executor rules below.
+
 ## Entry gate and workflow state
 
 Before editing, confirm:

@@ -19,13 +19,27 @@ Use local `git` for worktree inspection, branches, commits, fetch, push, and exa
 
 ### Connected GitHub app
 
-Prefer the connected app for issues, comments, labels, pull requests, reviews, and metadata.
+Prefer the connected app for issues, comments, labels, pull requests, reviews, and metadata when that transport is available in the current execution surface.
 
 ### GitHub CLI
 
-Use `gh` only when it is already available and offers a needed operation not covered by the connected app. Do not install or authenticate it merely for routine publication.
+Use `gh` only when it is already available and offers a needed operation not covered by another available transport. Do not install or authenticate it merely for routine publication.
 
-A failure of one replaceable transport is not a technical blocker when another route or a precise handoff can complete the operation.
+### Detached Skillforge local runner
+
+When `SKILLFORGE_LOCAL_RUNNER=1`, expect the long-running Codex session to be detached from the GitHub Actions job that launched it.
+
+The launcher intentionally removes `GH_TOKEN`, `GITHUB_TOKEN`, `CI`, and `GITHUB_ACTIONS` before starting Codex. Do not treat their absence as an error and do not attempt to recover them from runner files, process environments, Actions logs, or job metadata.
+
+Actions job tokens are ephemeral and must never be copied or persisted for the detached session. Use the host user's already-established persistent transports instead:
+
+- normal local Git authentication/SSH/credential-helper state for fetch/push;
+- an already-authenticated `gh` CLI when GitHub API operations are needed and no connected app is available;
+- another explicitly available secure transport.
+
+Before mutating remote state, verify that the selected persistent transport is authenticated for the exact repository. If persistent Git/GitHub authentication is genuinely unavailable and the operation is required, report that precise blocker rather than synthesizing credentials or weakening the workflow.
+
+A failure of one replaceable transport is not a technical blocker when another permitted route or a precise handoff can complete the operation.
 
 ## Workflow state
 
@@ -101,6 +115,8 @@ Before publication:
 - require a clean worktree unless the caller explicitly documents otherwise;
 - do not rewrite shared valid history.
 
+When the Skillforge local runner supplied `SKILLFORGE_ISSUE_WORKTREE` / `SKILLFORGE_ISSUE_BRANCH`, preserve that issue branch as the executor-owned implementation branch. Do not switch publication to the durable coordination clone or invent another branch merely because the executor was launched automatically.
+
 Publish and verify the remote ref. Use a full SHA when another actor must inspect an exact target.
 
 Do not repeat routine SHAs in every issue comment, PR update, or handoff when GitHub already preserves that identity.
@@ -160,6 +176,8 @@ Technical manifests and evidence artifacts should contain technical and reproduc
 
 Do not mutate implementation or evidence commits solely to embed review or merge state. Record external review against the immutable target in issue or PR discussion.
 
+Host-local Skillforge runner PID files, PTY helpers, launcher scripts, and transcripts under `$HOME/.skillforge/**` are operational infrastructure state. Never add them to the project repository or treat them as technical evidence unless the issue explicitly studies the runner infrastructure itself.
+
 ## Degraded control-plane operation
 
 When a requested GitHub operation cannot be completed in the current surface:
@@ -176,6 +194,7 @@ Use `blocked` only when the missing capability is required before safe meaningfu
 - Never force-push or rewrite shared history without explicit authorization.
 - Never stage or publish unrelated changes.
 - Never publish secrets, private credentials, generated binaries, restricted artifacts, or data without distribution rights.
+- Never persist an ephemeral GitHub Actions token for a detached executor.
 - Never silently change the controlling issue, base branch, head branch, labels, or PR state.
 - Never mutate implementation commits to compensate for transport limitations.
 - Never merge or enable auto-merge from a Codex implementation workflow.
