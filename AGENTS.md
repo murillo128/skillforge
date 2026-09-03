@@ -18,6 +18,7 @@ This section exists only in the canonical Skillforge template and in repositorie
 - In a repository created from this template, the presence of `skills/repository-bootstrap/SKILL.md` means initialization is incomplete.
 - Before normal non-trivial project work begins, run that skill once with the actual project mission, scope, and established repository constraints available.
 - A successful bootstrap must configure the required GitHub labels, make `README.md` project-specific, adapt repository-specific `AGENTS.md` invariants, delete `skills/repository-bootstrap/`, and remove this bootstrap section plus its routing entry.
+- Local Codex runner provisioning is optional and never required for repository bootstrap completion. If explicitly requested during initialization, bootstrap may hand off after successful publication to `skills/codex-local-runner/SKILL.md`.
 - If bootstrap cannot complete safely, it must remain installed so the initialization can be retried.
 
 ## Load context progressively
@@ -62,6 +63,7 @@ Skills define reusable **procedure**, not project state or product truth. Issues
 Load skills lazily by role:
 
 - one-time repository initialization: `skills/repository-bootstrap/SKILL.md`;
+- optional local Codex runner provisioning/repair: `skills/codex-local-runner/SKILL.md`;
 - design authority: `skills/design-github-issue/SKILL.md`;
 - main executor: `skills/spec-driven-codex-loop/SKILL.md`;
 - Git and GitHub mutation/publication: `skills/codex-github-operations/SKILL.md`;
@@ -69,7 +71,7 @@ Load skills lazily by role:
 - multi-issue orchestration: `skills/codex-issue-orchestrator/SKILL.md`;
 - derived repository wiki curation: `skills/repository-wiki-curation/SKILL.md`.
 
-Do not read a role skill merely because it exists. The executor does not need the full design, reviewer, or curator procedure; the reviewer does not need the executor procedure; the orchestrator must preserve each child issue's normal execution contract rather than replacing it.
+Do not read a role skill merely because it exists. The executor does not need the full design, reviewer, curator, or runner-provisioning procedure; the reviewer does not need the executor procedure; the orchestrator must preserve each child issue's normal execution contract rather than replacing it.
 
 `AGENTS.md` owns repository-wide invariants and routing. Each skill owns its reusable procedure. The controlling issue owns task-specific scope, inputs, commands, gates, and acceptance criteria. Avoid copying the same rule into all three places.
 
