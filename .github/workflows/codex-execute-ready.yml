@@ -5,9 +5,7 @@ on:
     types: [labeled]
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: codex-${{ github.repository }}-issue-${{ github.event.issue.number }}
@@ -19,7 +17,6 @@ jobs:
     runs-on: [self-hosted, codex]
 
     env:
-      GH_TOKEN: ${{ github.token }}
       SKILLFORGE_LOCAL_RUNNER: "1"
 
     steps:
@@ -85,16 +82,63 @@ jobs:
           echo "path=$worktree" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
-      - name: Execute controlling issue
+      - name: Launch controlling issue as detached Codex session
         shell: bash
         env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
           SKILLFORGE_ISSUE_WORKTREE: ${{ steps.worktree.outputs.path }}
           SKILLFORGE_ISSUE_BRANCH: ${{ steps.worktree.outputs.branch }}
         run: |
           set -euo pipefail
-          exec codex --ask-for-approval on-request exec \
+          command -v codex >/dev/null
+          command -v script >/dev/null
+          command -v setsid >/dev/null
+
+          repo_key="${GITHUB_REPOSITORY//\//-}"
+          state_dir="${HOME}/.skillforge/run/${repo_key}/issue-${ISSUE_NUMBER}"
+          log_dir="${SKILLFORGE_LOG_ROOT:-${HOME}/.skillforge/logs}/${repo_key}"
+          pid_file="${state_dir}/codex.pid"
+          launcher="${state_dir}/launch-codex.sh"
+          log_file="${log_dir}/issue-${ISSUE_NUMBER}-${GITHUB_RUN_ID}.log"
+          mkdir -p "$state_dir" "$log_dir"
+
+          if [ -f "$pid_file" ]; then
+            existing_pid="$(cat "$pid_file" 2>/dev/null || true)"
+            if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
+              echo "Codex session for issue #${ISSUE_NUMBER} is already running as pid ${existing_pid}; refusing a duplicate launch."
+              exit 0
+            fi
+            rm -f "$pid_file"
+          fi
+
+          cat > "$launcher" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          unset CI GITHUB_ACTIONS GH_TOKEN GITHUB_TOKEN
+          export RUNNER_TRACKING_ID=""
+          exec codex --ask-for-approval on-request \
             --cd "$SKILLFORGE_ISSUE_WORKTREE" \
+            --no-alt-screen \
             --sandbox workspace-write \
             -c 'approvals_reviewer="auto_review"' \
             -c 'sandbox_workspace_write.network_access=true' \
-            "Execute GitHub issue #${{ github.event.issue.number }} according to AGENTS.md."
+            "Execute GitHub issue #${ISSUE_NUMBER} according to AGENTS.md."
+          EOF
+          chmod 700 "$launcher"
+
+          launcher_cmd="$(printf '%q' "$launcher")"
+          RUNNER_TRACKING_ID="" nohup setsid -w script -qefc "$launcher_cmd" "$log_file" </dev/null >/dev/null 2>&1 &
+          codex_pid=$!
+          printf '%s\n' "$codex_pid" > "$pid_file"
+          printf '%s\n' "$log_file" > "${state_dir}/latest-log"
+
+          sleep 2
+          if ! kill -0 "$codex_pid" 2>/dev/null; then
+            echo "Detached Codex session failed to stay running." >&2
+            tail -n 80 "$log_file" >&2 || true
+            rm -f "$pid_file"
+            exit 1
+          fi
+
+          echo "Detached Codex session launched for issue #${ISSUE_NUMBER} (pid ${codex_pid})."
+          echo "Local transcript: ${log_file}"
