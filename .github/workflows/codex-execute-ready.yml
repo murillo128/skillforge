@@ -1,0 +1,33 @@
+name: Execute execution-ready issue with local Codex
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  execute:
+    if: github.event.label.name == 'execution-ready'
+    runs-on: [self-hosted, codex]
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Execute controlling issue
+        run: >-
+          codex exec
+          --sandbox workspace-write
+          --ask-for-approval on-request
+          -c 'approvals_reviewer="auto_review"'
+          -c 'sandbox_workspace_write.network_access=true'
+          "Execute GitHub issue #${{ github.event.issue.number }} according to AGENTS.md."
