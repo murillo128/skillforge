@@ -9,6 +9,10 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: codex-${{ github.repository }}-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   execute:
     if: github.event.label.name == 'execution-ready'
@@ -16,17 +20,29 @@ jobs:
 
     env:
       GH_TOKEN: ${{ github.token }}
+      SKILLFORGE_LOCAL_RUNNER: "1"
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
+      - name: Validate persistent repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SKILLFORGE_REPO_ROOT:?SKILLFORGE_REPO_ROOT must point to the persistent local checkout for this repository}"
+          test -d "$SKILLFORGE_REPO_ROOT"
+          git -C "$SKILLFORGE_REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null
+          origin="$(git -C "$SKILLFORGE_REPO_ROOT" remote get-url origin)"
+          case "$origin" in
+            "https://github.com/${GITHUB_REPOSITORY}"|"https://github.com/${GITHUB_REPOSITORY}.git"|"git@github.com:${GITHUB_REPOSITORY}"|"git@github.com:${GITHUB_REPOSITORY}.git"|"ssh://git@github.com/${GITHUB_REPOSITORY}"|"ssh://git@github.com/${GITHUB_REPOSITORY}.git") ;;
+            *) echo "SKILLFORGE_REPO_ROOT points to unexpected origin: $origin" >&2; exit 1 ;;
+          esac
 
       - name: Execute controlling issue
-        run: >-
-          codex --ask-for-approval on-request exec
-          --sandbox workspace-write
-          -c 'approvals_reviewer="auto_review"'
-          -c 'sandbox_workspace_write.network_access=true'
-          "Execute GitHub issue #${{ github.event.issue.number }} according to AGENTS.md."
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SKILLFORGE_REPO_ROOT"
+          exec codex --ask-for-approval on-request exec \
+            --sandbox workspace-write \
+            -c 'approvals_reviewer="auto_review"' \
+            -c 'sandbox_workspace_write.network_access=true' \
+            "Execute GitHub issue #${{ github.event.issue.number }} according to AGENTS.md."
