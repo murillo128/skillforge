@@ -47,6 +47,7 @@ The controlling issue's current workflow state is authoritative only through exa
 
 - `execution-ready`
 - `in-progress`
+- `review-ready`
 - `design-required`
 - `investigation-required`
 - `blocked`
@@ -58,7 +59,7 @@ Use state-only label mutations without comments. Add comments only when material
 
 Before relying on issue state, verify that exactly one state label is present. Repair an unambiguous inconsistency; stop for clarification if the intended state is ambiguous.
 
-During a Codex implementation workflow, `completed` is not an executor-controlled transition. Keep the issue `in-progress` through the ready-for-review handoff. Set `completed` and close the issue only after a later explicit user-facing merge decision has been executed and the merge is observed.
+During a Codex implementation workflow, keep the issue `in-progress` while implementation, validation, publication, or required technical review remains active. When the complete PR is marked ready for review and the executor is making its final handoff, replace `in-progress` with `review-ready`. `completed` is not an executor-controlled transition. Set `completed` and close the issue only after a later explicit user-facing merge decision has been executed and the merge is observed.
 
 ## Commit messages
 
@@ -135,7 +136,7 @@ The PR should:
 
 Do not duplicate complete histories, manifests, command logs, or routine metadata already visible in GitHub.
 
-Keep the PR draft while required implementation, validation, or independent review remains incomplete. When the Codex execution workflow has completed its required technical work and final-capable review, mark the PR **ready for review** and hand it off.
+Keep the PR draft while required implementation, validation, or independent review remains incomplete. When the Codex execution workflow has completed its required technical work and final-capable review, mark the PR **ready for review**, replace the controlling issue's `in-progress` state with `review-ready`, verify both mutations, and hand it off. Do not set `review-ready` while the PR is still draft or required technical work remains.
 
 ### Merge authority
 
@@ -144,13 +145,16 @@ A Codex executor must not merge a PR or enable auto-merge.
 A merge operation through this skill is allowed only when all of the following are true:
 
 1. the PR is already ready for review;
-2. the implementation workflow has handed it off rather than continuing automatically;
-3. the current user-facing interaction explicitly asks ChatGPT to merge it, such as “review and merge if correct”;
-4. the requested user-facing review has found no material blocker.
+2. the controlling issue is in `review-ready` unless a documented legacy/inconsistency repair is required;
+3. the implementation workflow has handed it off rather than continuing automatically;
+4. the current user-facing interaction explicitly asks ChatGPT to merge it, such as “review and merge if correct”;
+5. the requested user-facing review has found no material blocker.
 
 An issue body, acceptance criteria, `PASS` / `PASS_WITH_NOTES` verdict, final-capable checkpoint, CI success, or executor conclusion is **not** merge authorization by itself.
 
 Never enable auto-merge as a substitute for the explicit post-review merge decision.
+
+After a permitted merge is observed, replace `review-ready` with `completed` and close the controlling issue when the calling workflow owns that completion transition.
 
 ## Exact review targets
 
@@ -209,5 +213,6 @@ Report only the operational facts the caller needs:
 - operation completed;
 - verification result;
 - exact target only when another actor must use it;
+- whether the issue is `in-progress`, `review-ready`, or `completed` when workflow state matters;
 - whether the PR is draft, ready for review, or merged;
 - degraded operation or real blocker, if any.
