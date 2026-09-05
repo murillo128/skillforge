@@ -54,7 +54,7 @@ For every dispatched issue:
 2. give it exactly one controlling issue and the base ref selected by this skill;
 3. require it to load `AGENTS.md`, that controlling issue, and `spec-driven-codex-loop` normally;
 4. enable the orchestration progress-observability policy defined below when useful;
-5. let the worker own its branch, implementation, validation, evidence, commits, independent review, PR publication, and ready-for-review handoff;
+5. let the worker own its branch, implementation, validation, evidence, commits, independent review, PR publication, and `review-ready` handoff;
 6. wait for the worker outcome according to the selected schedule;
 7. record only the outcome needed by the orchestration loop.
 
@@ -84,7 +84,7 @@ Progress comments are observability, not checkpoints:
 - they do not require publication of a review target;
 - they do not trigger independent review;
 - they do not authorize contract changes;
-- they do not replace normal checkpoint, blocker, design/investigation-return, or ready-for-review comments required by `spec-driven-codex-loop`.
+- they do not replace normal checkpoint, blocker, design/investigation-return, or final-handoff comments required by `spec-driven-codex-loop`.
 
 ## Independent issues
 
@@ -102,10 +102,10 @@ Run one worker, wait for it to terminate, record its outcome, then continue to t
 
 A worker ending in any of these states does **not** block later independent issues:
 
-- ready-for-review;
-- blocked;
-- design-required;
-- investigation-required;
+- `review-ready`;
+- `blocked`;
+- `design-required`;
+- `investigation-required`;
 - implementation or validation failure;
 - worker/process/transport failure.
 
@@ -143,7 +143,7 @@ Rules:
 - a fresh worker is still used for every issue;
 - do not merge predecessor PRs automatically to advance the chain.
 
-A downstream issue may start only after its predecessor reaches a valid ready-for-review handoff with a published branch/head suitable as the next base.
+A downstream issue may start only after its predecessor reaches a valid `review-ready` handoff with a published branch/head suitable as the next base.
 
 Any predecessor outcome that does not provide that successful dependency state stops the chain. This includes `blocked`, `design-required`, `investigation-required`, failed implementation/validation/review, worker failure, or an unavailable/ambiguous predecessor branch.
 
@@ -160,7 +160,7 @@ If an external action changes or merges a branch while the dependent chain is ru
 Before dispatching an issue, avoid duplicating work that is already terminal for the requested purpose.
 
 - `completed` issues are recorded as already completed unless the caller explicitly requests re-execution;
-- an existing ready-for-review handoff may be reused as the issue outcome when no additional execution was requested;
+- `review-ready` issues may be reused as the successful issue outcome when no additional execution was requested;
 - an `in-progress` issue with an existing branch/PR should be resumed by its worker through the normal spec-driven workflow rather than creating competing ownership.
 
 If ownership is ambiguous, do not launch a second executor for the same controlling issue.
@@ -187,7 +187,7 @@ After all permitted workers have terminated, produce one compact table with at l
 
 Useful outcomes include:
 
-- `ready-for-review`;
+- `review-ready`;
 - `already-completed`;
 - `blocked`;
 - `design-required`;
