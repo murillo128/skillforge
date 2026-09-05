@@ -63,6 +63,7 @@ Before bootstrap can complete, verify that these labels exist at repository scop
 
 - `execution-ready`
 - `in-progress`
+- `review-ready`
 - `design-required`
 - `investigation-required`
 - `blocked`
@@ -146,7 +147,7 @@ Do not inspect the entire history merely because bootstrap is running.
 
 ### 3. Ensure required labels
 
-Create missing required labels and verify all seven required names exist.
+Create missing required labels and verify all eight required names exist.
 
 Label creation is intentionally completed before self-removal. If a run stops later, repeating this step must be harmless.
 
