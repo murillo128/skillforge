@@ -81,6 +81,7 @@ For non-trivial controlling issues, use exactly one current workflow-state label
 
 - `execution-ready`
 - `in-progress`
+- `review-ready`
 - `design-required`
 - `investigation-required`
 - `blocked`
@@ -90,7 +91,7 @@ The label is authoritative for current workflow state. Issue-body readiness and 
 
 Use state-only label transitions without adding comments whose sole purpose is to announce the transition. Preserve comments for material technical findings, contract amendments, checkpoint targets/verdicts, blockers, or handoffs.
 
-`completed` is a post-acceptance/post-merge state. An implementation executor stops at a ready-for-review handoff and must not treat CI success or an independent technical `PASS` as merge authorization.
+`review-ready` is the executor's successful terminal state: required implementation, validation, and final technical review are complete and the PR is ready for user-facing review. `completed` is a post-acceptance/post-merge state. An implementation executor must replace `in-progress` with `review-ready` as part of the final handoff, then stop; it must not treat CI success or an independent technical `PASS` as merge authorization.
 
 ## Design and execution discipline
 
@@ -161,7 +162,7 @@ Do not mix GitHub bookkeeping into technical evidence unless that metadata is it
 - Commit messages must follow the convention owned by `skills/codex-github-operations/SKILL.md`.
 - Do not force-push or rewrite shared valid history without explicit user authorization.
 - Direct commits to the default branch require explicit user instruction **except** for the narrowly authorized `repository-wiki-curation` workflow, which may publish only `wiki/**` after its hard gates pass.
-- A Codex implementation workflow ends at a **ready-for-review** pull request and handoff.
+- A Codex implementation workflow ends with a **ready-for-review** pull request, the controlling issue transitioned from `in-progress` to `review-ready`, and a handoff.
 - Executors and independent reviewers must not merge or enable auto-merge on their own authority.
 - Merge requires a later explicit user-facing instruction after review finds no material blocker.
 
