@@ -90,7 +90,7 @@ Use precise names, paths, values, examples, and equations where they remove ambi
 
 Do not copy generic Git, publication, review, label, merge, or reporting procedure already owned by skills. Do not duplicate chronological histories, complete logs, routine GitHub metadata, or user-oriented teaching content.
 
-An issue may state observable post-merge completion conditions, but it must not authorize the Codex executor to merge or enable auto-merge. The repository workflow owns that boundary: execution delivers a ready-for-review PR; a later explicit user-facing review decides whether to merge.
+An issue may state observable post-merge completion conditions, but it must not authorize the Codex executor to merge or enable auto-merge. The repository workflow owns that boundary: execution delivers a ready-for-review PR and a controlling issue in `review-ready`; a later explicit user-facing review decides whether to merge.
 
 ## Readiness
 
@@ -101,6 +101,7 @@ Use exactly one workflow state label:
 - `investigation-required`
 - `blocked`
 - `in-progress`
+- `review-ready`
 - `completed`
 
 At issue publication, set exactly one state label through `codex-github-operations`. The issue body may record **Initial state** for historical context, but the label is authoritative for current state.
