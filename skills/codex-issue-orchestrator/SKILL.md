@@ -1,200 +1,56 @@
 ---
 name: codex-issue-orchestrator
-description: Orchestrate multiple controlling GitHub issues through fresh Codex workers in parallel or sequential order while preserving each issue's normal spec-driven execution workflow.
+description: Orchestrate an explicit set of controlling GitHub issues through fresh Codex workers in parallel or sequential order while preserving each issue's normal spec-driven execution workflow.
 ---
 
 # Codex Issue Orchestrator
 
 ## Responsibility
 
-Use this skill when one parent Codex session must execute a known set of controlling GitHub issues through separate worker agents.
+Use when one parent Codex session must execute a known explicit set of ordinary controlling issues through separate worker agents. This is manual/batch orchestration, distinct from `codex-epic-scheduler`: it does not generate or own an epic DAG and does not react to workflow labels.
 
-This skill owns only:
+It owns issue ordering/dispatch, parallel vs sequential scheduling, independent vs dependent semantics, base selection, worker-failure propagation, progress observability, and final batch summary. It never implements, redesigns, audits, or merges a child issue itself.
 
-- issue ordering and dispatch;
-- parallel versus sequential scheduling;
-- independent versus dependent issue semantics;
-- the base ref passed to each worker;
-- failure propagation between issues;
-- batch-worker progress observability;
-- the final orchestration summary.
+Each worker executes exactly one controlling issue with `spec-driven-codex-loop`. Its successful terminal outcome is a ready PR plus `review-ready`; the separate issue-state dispatcher/audit workflow may later audit/merge/complete it.
 
-It does **not** own issue implementation, validation, publication, review, redesign, or merge decisions. Every worker executes exactly one controlling issue using `spec-driven-codex-loop` and the normal repository workflow.
+## Inputs
 
-The orchestrator must not implement an issue itself merely because a worker fails, and it must not redesign an issue from batch-level context.
+Resolve explicit ordered issue list, `schedule` (`parallel` or `sequential`), `dependency` (`independent` or `dependent`), and initial base ref. Valid combinations are parallel+independent, sequential+independent, and sequential+dependent. Parallel+dependent is invalid.
 
-## Required orchestration inputs
-
-Resolve these before dispatch:
-
-- an explicit ordered list of controlling issues;
-- `schedule`: `parallel` or `sequential`;
-- `dependency`: `independent` or `dependent`;
-- the initial base branch or exact base ref.
-
-Valid combinations are:
-
-| Schedule | Dependency | Meaning |
-| --- | --- | --- |
-| `parallel` | `independent` | launch independent workers concurrently |
-| `sequential` | `independent` | run independent workers one at a time |
-| `sequential` | `dependent` | run a stacked dependency chain one issue at a time |
-
-`parallel + dependent` is invalid. Stop and request a coherent orchestration mode instead of inventing dependency behavior.
-
-Do not infer extra work from neighboring issues, labels, milestones, or an epic body once the issue list has been resolved.
-
-Do not silently promote provisional conclusions from one worker into another worker's contract. New cross-issue requirements must be recorded through the normal design/issue workflow.
+Do not infer extra work from neighboring issues, labels, milestones, or an epic body after the issue list is resolved. Do not promote provisional conclusions from one worker into another contract.
 
 ## Worker contract
 
-For every dispatched issue:
+For each issue start a fresh worker, give it exactly one controlling issue and selected base, require normal `AGENTS.md` + `spec-driven-codex-loop`, optionally request coarse progress observability, and let it own implementation, validation, evidence, commits, issue-declared intermediate review, PR publication, and `review-ready` handoff. Wait/record only what orchestration needs.
 
-1. start a fresh worker agent;
-2. give it exactly one controlling issue and the base ref selected by this skill;
-3. require it to load `AGENTS.md`, that controlling issue, and `spec-driven-codex-loop` normally;
-4. enable the orchestration progress-observability policy defined below when useful;
-5. let the worker own its branch, implementation, validation, evidence, commits, independent review, PR publication, and `review-ready` handoff;
-6. wait for the worker outcome according to the selected schedule;
-7. record only the outcome needed by the orchestration loop.
+Do not transfer temporary diagnostics, hidden reasoning, uncommitted state, or ad-hoc prompt conclusions between workers. Each issue keeps its own PR/branch unless its contract explicitly says otherwise.
 
-Do not carry implementation conclusions, temporary diagnostics, prompt changes, benchmark observations, or uncommitted state from one worker into another unless `dependency=dependent` and the state is intentionally preserved in the predecessor's published branch or controlling contract.
+## Progress observability
 
-Each controlling issue still gets its own PR under the normal spec-driven workflow unless an issue explicitly defines another delivery boundary. This skill never merges or enables auto-merge.
+Workers may add concise issue comments at useful phase boundaries such as start/context established, completion of a material setup/preflight phase, start/end of a long-running evaluation/build/migration, coarse cheaply available progress, or a material retry/fallback/blocker. Avoid per-item/log chatter.
 
-## Batch worker observability
-
-Orchestrated execution may be more observable than an ordinary single-issue Codex run. The worker may leave concise progress comments on its **controlling issue** in addition to the normal material checkpoint and final-handoff comments.
-
-This is a progress-reporting request from the calling workflow; it does not change the issue contract, acceptance criteria, review gates, or source-of-truth hierarchy.
-
-Post a progress update when it gives a remote observer useful new state, normally at boundaries such as:
-
-- worker started and execution/base context is established;
-- a material preflight, compatibility, setup, or environment phase finishes;
-- a long-running build, migration, generation, evaluation, training, benchmark, or similar phase starts;
-- a long-running phase reaches a useful coarse progress boundary when that progress is cheaply available;
-- that long-running phase finishes and the worker moves into validation/evidence/review;
-- an unexpected failure, retry, fallback decision, or blocker materially changes what the worker is doing.
-
-For a long-running loop, prefer a few coarse updates over time-based chatter. Do not comment per test case, task, candidate, retry, build target, or log line.
-
-Progress comments are observability, not checkpoints:
-
-- they do not require publication of a review target;
-- they do not trigger independent review;
-- they do not authorize contract changes;
-- they do not replace normal checkpoint, blocker, design/investigation-return, or final-handoff comments required by `spec-driven-codex-loop`.
+Progress comments are not review checkpoints, do not alter acceptance/scope, and do not replace normal material findings/handoff comments.
 
 ## Independent issues
 
-Independent issues must not inherit unmerged sibling work.
+Independent workers must not inherit unmerged sibling work. They branch from the designated common base/ref and keep outcomes isolated.
 
-For each worker:
+Sequential independent execution waits for each worker before the next but continues after `review-ready`, `blocked`, `design-required`, `investigation-required`, implementation/validation failure, or worker/transport failure unless caller explicitly requested otherwise. Record failure; do not repair it in orchestrator.
 
-- branch from the designated common base branch/ref, not from another issue's PR branch;
-- keep its implementation and PR independent of sibling outcomes;
-- do not change its issue contract because another worker's implementation, benchmark, or experiment performed well or poorly.
-
-### Sequential independent
-
-Run one worker, wait for it to terminate, record its outcome, then continue to the next issue unless the calling workflow explicitly says otherwise.
-
-A worker ending in any of these states does **not** block later independent issues:
-
-- `review-ready`;
-- `blocked`;
-- `design-required`;
-- `investigation-required`;
-- implementation or validation failure;
-- worker/process/transport failure.
-
-The orchestrator records the failure and continues. It does not repair the failed issue itself.
-
-### Parallel independent
-
-Launch one fresh worker per issue concurrently.
-
-Each worker uses the same designated independent base policy and remains isolated from sibling branches. One worker failing or blocking must not cancel unrelated workers.
-
-Wait for all workers to reach a terminal handoff/failure state, then summarize the batch.
+Parallel independent execution launches one fresh worker per issue; one failure does not cancel siblings. Wait for all to terminate then summarize.
 
 ## Sequential dependent issues
 
-Use this mode only when each issue intentionally builds on the previous issue's unmerged implementation.
+Use only when each issue intentionally builds on the previous issue's unmerged implementation. First starts from initial base; each later worker starts from exact published head of immediately preceding successful `review-ready` issue and its PR targets predecessor branch so its diff is incremental. Never auto-merge predecessors merely to advance chain.
 
-The chain is stacked:
+A downstream worker starts only after predecessor provides a valid `review-ready` published branch/head. Any other predecessor outcome stops the chain and marks later issues not executed due to dependency failure. If branch topology changes externally and intended next base becomes ambiguous, stop rather than guessing.
 
-```text
-initial base
-   |
-issue A branch -> PR A
-   |
-issue B branch -> PR B (base: issue A branch)
-   |
-issue C branch -> PR C (base: issue B branch)
-```
+## Existing work and resume
 
-Rules:
-
-- the first worker starts from the declared initial base;
-- each later worker starts from the exact published head of the immediately preceding successful issue;
-- each later PR targets the predecessor branch so its diff represents only that issue's additional work;
-- a fresh worker is still used for every issue;
-- do not merge predecessor PRs automatically to advance the chain.
-
-A downstream issue may start only after its predecessor reaches a valid `review-ready` handoff with a published branch/head suitable as the next base.
-
-Any predecessor outcome that does not provide that successful dependency state stops the chain. This includes `blocked`, `design-required`, `investigation-required`, failed implementation/validation/review, worker failure, or an unavailable/ambiguous predecessor branch.
-
-When the chain stops:
-
-- preserve the predecessor's real outcome;
-- do not launch downstream workers;
-- report the first blocking issue and mark later issues as not executed due to dependency failure.
-
-If an external action changes or merges a branch while the dependent chain is running and the intended next base becomes ambiguous, stop instead of guessing a new stack topology.
-
-## Existing work and resume behavior
-
-Before dispatching an issue, avoid duplicating work that is already terminal for the requested purpose.
-
-- `completed` issues are recorded as already completed unless the caller explicitly requests re-execution;
-- `review-ready` issues may be reused as the successful issue outcome when no additional execution was requested;
-- an `in-progress` issue with an existing branch/PR should be resumed by its worker through the normal spec-driven workflow rather than creating competing ownership.
-
-If ownership is ambiguous, do not launch a second executor for the same controlling issue.
-
-## Orchestrator failure policy
-
-The parent orchestrator should remain small and durable:
-
-- worker-local technical failures belong to the worker and controlling issue;
-- an independent worker failure is recorded, not escalated into a batch abort;
-- a dependent worker failure stops only the dependency chain as defined above;
-- failure to launch the orchestration mechanism itself is an orchestrator failure and should be reported precisely.
-
-Do not convert a batch orchestration problem into a technical, product, or research decision inside a child issue.
-
-Do not create new project-wide orchestration machinery, roadmaps, schemas, or state stores merely because a batch is large. Reuse the issue/PR/skill workflow unless an explicit design decision requires additional infrastructure.
+`completed` may be recorded as already complete unless re-execution is explicit. `review-ready` may be reused as successful executor outcome when no more execution was requested. An `in-progress` issue with existing branch/PR is resumed through normal executor workflow rather than duplicated. Ambiguous ownership blocks a second executor.
 
 ## Completion
 
-After all permitted workers have terminated, produce one compact table with at least:
+After all permitted workers terminate, produce one compact table with issue, outcome, PR/branch, and result/blocker. Useful outcomes: `review-ready`, `already-completed`, `blocked`, `design-required`, `investigation-required`, `failed`, and `not-run-dependency-failure`.
 
-| Issue | Outcome | PR / branch | Result or blocker |
-| --- | --- | --- | --- |
-
-Useful outcomes include:
-
-- `review-ready`;
-- `already-completed`;
-- `blocked`;
-- `design-required`;
-- `investigation-required`;
-- `failed`;
-- `not-run-dependency-failure`.
-
-Do not duplicate complete worker logs or PR histories. The issue and PR remain the source of truth for each worker's detailed execution.
-
-The orchestration completes when every independent issue has terminated, or when a dependent chain has either completed or stopped at its first failed dependency. It never implies that any PR is approved for merge.
+Orchestration completion means workers reached terminal execution outcomes; it does not imply PR audit/merge/completion.

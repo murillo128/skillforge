@@ -4,81 +4,63 @@ Repository-wide instructions for ChatGPT, Codex, and other development agents.
 
 ## Mission and scope
 
-The project's durable mission and product/domain scope belong in `README.md` and the repository documentation that explicitly owns them.
+The project's durable mission and product/domain scope belong in `README.md` and the repository documentation that explicitly owns them. Do not broaden the project, invent adjacent goals, or promote exploratory discussion into settled scope without an explicit repository or issue-level decision.
 
-Agents must not broaden the project, invent adjacent goals, or promote exploratory discussion into settled scope without an explicit repository or issue-level decision.
-
-This file owns repository-wide agent invariants and routes work to reusable skills. It should remain compact. Do not duplicate detailed procedures here when a skill already owns them.
+This file owns repository-wide agent invariants and routes work to reusable skills. Skills define reusable procedure, issues define bounded task contracts, and repository documents define durable project knowledge.
 
 ## One-time template bootstrap
 
-This section exists only in the canonical Skillforge template and in repositories that have not yet completed initialization.
+This section exists only in the canonical Skillforge template and repositories not yet initialized.
 
-- Never execute `repository-bootstrap` inside the canonical `murillo128/skillforge` template repository itself.
-- In a repository created from this template, the presence of `skills/repository-bootstrap/SKILL.md` means initialization is incomplete.
-- Before normal non-trivial project work begins, run that skill once with the actual project mission, scope, and established repository constraints available.
-- A successful bootstrap must configure the required GitHub labels, make `README.md` project-specific, adapt repository-specific `AGENTS.md` invariants, delete `skills/repository-bootstrap/`, and remove this bootstrap section plus its routing entry.
-- Local Codex runner provisioning is optional and never required for repository bootstrap completion. If explicitly requested during initialization, bootstrap may hand off after successful publication to `skills/codex-local-runner/SKILL.md`.
-- If bootstrap cannot complete safely, it must remain installed so the initialization can be retried.
+- Never execute `repository-bootstrap` inside canonical `murillo128/skillforge` itself.
+- In a repository created from this template, presence of `skills/repository-bootstrap/SKILL.md` means initialization is incomplete.
+- Before normal non-trivial project work, run that skill once with actual mission/scope/established constraints.
+- Successful bootstrap creates/verifies required labels, makes README project-specific, adapts project invariants, deletes bootstrap skill, and removes this section/routing entry.
+- Local Codex runner provisioning is optional and is a separate post-bootstrap capability.
 
 ## Load context progressively
 
-For non-trivial work, start with:
+For non-trivial work start with `AGENTS.md` and the controlling issue. Then load only accepted decisions/spec sections, source/tests/config/evidence, and the one workflow skill needed by the current role/action. Do not preload every document, skill, issue/PR history, result directory, or derived wiki.
 
-1. `AGENTS.md`;
-2. the controlling GitHub issue.
-
-Then load only the context needed for the current role and task:
-
-- exact accepted decision/specification/plan sections referenced by the issue;
-- relevant source, tests, build files, configuration, fixtures, artifacts, and evidence;
-- the one workflow skill that owns the current action;
-- additional utility or domain skills only when the active action actually requires them.
-
-Do not preload every repository document, every skill, complete issue/PR histories, whole evidence/result directories, or the whole derived wiki unless the task genuinely requires them.
-
-On resume, verify branch, `HEAD`, worktree state, the controlling issue's current state label, and new material issue or PR discussion since the last handoff. Reuse already-inspected facts while their source identity remains unchanged instead of replaying history.
+On resume, verify branch, `HEAD`, worktree, controlling issue's current single workflow-state label, canonical execution context when applicable, and new material issue/PR discussion. Reuse unchanged inspected context rather than replaying history.
 
 ## Source-of-truth hierarchy
 
-Unless project-specific documentation explicitly defines a stricter hierarchy, use this order:
+Unless project-specific documentation defines a stricter hierarchy:
 
-1. Tests, formal checks, evaluation outputs, and captured evidence establish **observed behavior**.
-2. Accepted specifications, decision records, architecture documents, `docs/**`, and other explicitly normative repository documents establish **durable intended behavior** within their declared scope.
-3. The controlling GitHub issue establishes the **bounded execution contract** for the active task.
-4. Pull requests, checks, reviews, commits, and Git history preserve implementation and reproducible evidence.
-5. Roadmaps, epics, and planning documents establish planning/dependency status only to the extent they explicitly claim authority.
-6. Exploratory notes, research documents, drafts, and brainstorming preserve hypotheses and context but are not requirements unless explicitly adopted.
-7. `wiki/**` contains **agent-generated derived project knowledge** for orientation and accumulated context. It is non-normative and never overrides stronger sources above.
-8. Chat discussion is provisional until intentionally recorded in an authoritative repository or GitHub source.
+1. Tests, formal checks, evaluation outputs, and captured evidence establish observed behavior.
+2. Accepted specifications, decisions, architecture docs, `docs/**`, and other explicitly normative documents establish durable intended behavior.
+3. The controlling issue establishes the bounded execution contract.
+4. PRs, checks, reviews, commits, and Git history preserve implementation and reproducible evidence.
+5. Roadmaps/epics/planning establish planning/dependency status only within their declared authority.
+6. Exploratory notes/research/drafts are provisional unless explicitly adopted.
+7. `wiki/**` is agent-generated derived non-normative knowledge and never overrides stronger sources.
+8. Chat is provisional until intentionally recorded in an authoritative repository/GitHub source.
 
-When authoritative sources materially conflict, do not silently choose one. Document or surface the conflict and return to the appropriate design/decision authority.
-
-Do not promote an `OPEN`, `SPECULATIVE`, exploratory, wiki-derived, or otherwise provisional statement into an implementation requirement without an explicit decision from an authoritative source.
+Do not promote `OPEN`, `SPECULATIVE`, exploratory, or wiki-derived statements into requirements without explicit adoption. Surface material conflicts rather than silently choosing.
 
 ## Skill-driven workflow
 
-Skills define reusable **procedure**, not project state or product truth. Issues define task-specific contracts. Repository documents define durable project knowledge. Keep those responsibilities separate.
-
 Load skills lazily by role:
 
-- one-time repository initialization: `skills/repository-bootstrap/SKILL.md`;
-- optional local Codex runner provisioning/repair: `skills/codex-local-runner/SKILL.md`;
+- one-time initialization: `skills/repository-bootstrap/SKILL.md`;
+- optional local runner provisioning/repair: `skills/codex-local-runner/SKILL.md`;
 - design authority: `skills/design-github-issue/SKILL.md`;
-- main executor: `skills/spec-driven-codex-loop/SKILL.md`;
-- Git and GitHub mutation/publication: `skills/codex-github-operations/SKILL.md`;
-- independent checkpoint/final technical review: `skills/codex-independent-review/SKILL.md`;
-- multi-issue orchestration: `skills/codex-issue-orchestrator/SKILL.md`;
-- derived repository wiki curation: `skills/repository-wiki-curation/SKILL.md`.
+- ordinary issue executor: `skills/spec-driven-codex-loop/SKILL.md`;
+- final PR audit controller: `skills/codex-pr-audit/SKILL.md`;
+- Git/GitHub mutations/publication: `skills/codex-github-operations/SKILL.md`;
+- independent technical review: `skills/codex-independent-review/SKILL.md`;
+- event-driven epic initialization/scheduling: `skills/codex-epic-scheduler/SKILL.md`;
+- explicit manual multi-issue orchestration: `skills/codex-issue-orchestrator/SKILL.md`;
+- derived wiki curation: `skills/repository-wiki-curation/SKILL.md`.
 
-Do not read a role skill merely because it exists. The executor does not need the full design, reviewer, curator, or runner-provisioning procedure; the reviewer does not need the executor procedure; the orchestrator must preserve each child issue's normal execution contract rather than replacing it.
-
-`AGENTS.md` owns repository-wide invariants and routing. Each skill owns its reusable procedure. The controlling issue owns task-specific scope, inputs, commands, gates, and acceptance criteria. Avoid copying the same rule into all three places.
+The generic launcher for an execution target is the same. After launch, read the controlling issue: when it declares `execution_mode: epic-dag`, route to `codex-epic-scheduler`; otherwise route to `spec-driven-codex-loop`. Keep this decision in agent instructions, not duplicated in the launcher workflow.
 
 ## Workflow state
 
-For non-trivial controlling issues, use exactly one current workflow-state label:
+Every non-trivial controlling issue uses exactly one current workflow-state label:
 
+- `queued`
 - `execution-ready`
 - `in-progress`
 - `review-ready`
@@ -87,95 +69,51 @@ For non-trivial controlling issues, use exactly one current workflow-state label
 - `blocked`
 - `completed`
 
-The label is authoritative for current workflow state. Issue-body readiness and historical comments do not override it.
+The label is authoritative. State-only transitions normally produce no comment.
 
-Use state-only label transitions without adding comments whose sole purpose is to announce the transition. Preserve comments for material technical findings, contract amendments, checkpoint targets/verdicts, blockers, or handoffs.
+`queued` is normal waiting for a fully designed epic child; it is not a blocker. Only `codex-epic-scheduler` may automatically promote `queued -> execution-ready`. An actor that explicitly resolves `blocked`, `design-required`, or `investigation-required` may return an epic child to `queued`.
 
-`review-ready` is the executor's successful terminal state: required implementation, validation, and final technical review are complete and the PR is ready for user-facing review. `completed` is a post-acceptance/post-merge state. An implementation executor must replace `in-progress` with `review-ready` as part of the final handoff, then stop; it must not treat CI success or an independent technical `PASS` as merge authorization.
+`review-ready` is the executor's successful terminal handoff: implementation/validation and issue-declared intermediate checkpoints are complete, the PR is ready, and integration freshness is stable when applicable. It hands control to `codex-pr-audit`; the executor does not perform a duplicate final independent review.
+
+`completed` is post-merge. Executors and independent reviewers never merge, enable auto-merge, close issues, or set completed. After `codex-pr-audit` obtains `PASS` or `PASS_WITH_NOTES` with `final-capable: yes` on its current exact PR head, the audit controller has standing authority to merge that exact head, make `completed` observable, and close the issue. The reviewer verdict alone has no mutation authority.
+
+## Epic workflow
+
+An epic parent starts with a compact seed contract (`execution_mode: epic-dag`, child issue set, parallelism limit, optional integration branch), **not** a manually generated DAG. Its initial state is `execution-ready`; fully designed children normally start `queued`.
+
+The first `codex-epic-scheduler` turn inspects all child contracts, derives direct dependency edges and serialization mutexes, validates acyclicity/closure, creates the integration branch from the current default branch when necessary, and persists exactly one parent comment marked `<!-- codex-epic-dag:v1 -->`. Only after that durable graph exists does it make the parent `in-progress` and activate the first wave.
+
+Later scheduler turns consume the canonical graph; they do not re-infer it from edited prose. Every child activation receives exactly one canonical `<!-- codex-execution-context:v1 -->` comment with parent, integration branch, and exact base SHA before `execution-ready` becomes observable.
+
+The single `.github/workflows/codex-issue-state.yml` dispatcher is the only `issues:labeled` workflow. It routes `execution-ready` to execution, `review-ready` to audit, and `completed`/`queued` child events to the unique active parent discovered from canonical DAG state. Duplicate/delayed scheduler wake-ups are expected and must remain idempotent.
 
 ## Design and execution discipline
 
-For non-trivial changes:
+For non-trivial changes, design a self-contained controlling issue; implement the smallest coherent outcome; preserve behavior outside scope; validate proportionally with repository-native checks; retain enough evidence for claims; and use independent review only at issue-declared intermediate risk boundaries plus the final audit controller.
 
-- design the controlling issue so a fresh executor can work without hidden chat reasoning;
-- implement the smallest coherent outcome that satisfies the issue;
-- preserve behavior outside scope;
-- validate with repository-native checks appropriate to the risk;
-- retain enough evidence to support the claims being made;
-- use independent review at issue-declared material checkpoints;
-- stop or return to design when evidence invalidates the contract or a material decision is missing.
+Do not invent project-wide roadmaps, schemas, frameworks, ontologies, or process machinery merely because they might be useful. Do not mechanically implement every reviewer suggestion; judge findings against contract/materiality/invariants.
 
-Do not invent project-wide roadmaps, phases, schemas, frameworks, ontologies, or process machinery merely because they might be useful later. Introduce persistent structure only when the current task or an explicit project decision requires it.
+## Durable knowledge and wiki
 
-Do not mechanically implement every reviewer suggestion. Review findings must be judged by the controlling contract, materiality, and repository invariants.
+Keep deliberate normative docs and generated memory distinct. `docs/**` and other explicitly normative sources use normal design/execution workflow. `wiki/**` is generated, derived, non-normative memory maintained by `repository-wiki-curation`. GitHub issues own actionable discrepancies, unresolved decisions, suspected defects/drift, and bounded work contracts.
 
-## Durable knowledge, docs, and derived wiki
-
-Keep deliberate normative documentation and generated/derived memory distinct:
-
-- `docs/**` and other explicitly normative project documents are deliberate project sources maintained through the normal design/execution workflow;
-- `wiki/**` is agent-generated, derived, non-normative project memory maintained by `repository-wiki-curation`;
-- GitHub issues own actionable discrepancies, unresolved decisions, suspected drift/defects, and bounded work contracts.
-
-Update durable repository documents only when the durable knowledge they own changes.
-
-Examples:
-
-- architecture/accepted technical choices -> the repository's decision or architecture documentation;
-- stable subsystem responsibilities and boundaries -> the documentation that owns code structure/design;
-- reusable development procedure -> the appropriate skill;
-- derived explanatory synthesis and accumulated orientation context -> `wiki/**` via the curator;
-- actionable discrepancy or unresolved decision discovered by the curator -> a GitHub issue, with `curator-detected` on newly curator-created issues;
-- task-local decisions, evidence, or blockers -> the controlling issue/PR/evidence artifact;
-- roadmap/dependency status -> the repository's planning source, when one exists.
-
-Do not edit normative docs merely to mirror GitHub workflow state, individual commits, chronological session history, or the current contents of the derived wiki.
-
-When repeated successful work exposes a genuinely reusable procedure, prefer extracting or improving a skill through the normal workflow instead of accumulating ad-hoc instructions across issues. The wiki curator itself may identify such a candidate, but it must route the actionable change through an issue rather than modify skills.
-
-## Wiki curator hard boundary
-
-`repository-wiki-curation` is a deliberately narrow exception to the normal publication workflow.
-
-It has standing ownership of **only `wiki/**`** and may commit/publish changes there directly to the default branch without a PR. This authority is conditional on the skill's mandatory adversarial review and fail-closed write-boundary gate.
-
-The curator must never modify or publish a change to any non-wiki path. Before moving the default-branch ref or otherwise publishing, it must prove that the complete candidate commit changes only `wiki/**`. If any changed path falls outside that boundary, publication must abort.
-
-New GitHub issues created by the curator must carry `curator-detected` so their provenance is visible. This issue-creation authority does not expand the curator's file-write boundary.
+The curator has standing write authority only for `wiki/**`, and only after its adversarial review and hard write-boundary gate. It never modifies non-wiki paths. New curator-created issues use `curator-detected`.
 
 ## Evidence and artifacts
 
-Keep evidence proportional to the claim.
-
-Commit source, tests, configuration, small deterministic fixtures, concise reports, and compact evidence that materially helps inspection or reproduction.
-
-Large generated outputs, binaries, model weights, datasets, caches, traces, bulky logs, or other expensive artifacts should stay outside Git unless the project explicitly requires them and redistribution is permitted.
-
-Never publish secrets, credentials, private data, or artifacts without the necessary rights.
-
-Do not mix GitHub bookkeeping into technical evidence unless that metadata is itself a technical input to the system under test.
+Keep evidence proportional. Commit source, tests, configuration, small deterministic fixtures, concise reports, and compact reproducibility evidence. Keep large generated outputs, binaries, model weights, datasets, caches, traces, or bulky logs outside Git unless explicitly required and distributable. Never publish secrets/private data/restricted artifacts.
 
 ## Git and GitHub behavior
 
-- Keep changes scoped; avoid unrelated cleanup or formatting.
-- Use explicit paths when staging or publishing changes.
-- Commit messages must follow the convention owned by `skills/codex-github-operations/SKILL.md`.
-- Do not force-push or rewrite shared valid history without explicit user authorization.
-- Direct commits to the default branch require explicit user instruction **except** for the narrowly authorized `repository-wiki-curation` workflow, which may publish only `wiki/**` after its hard gates pass.
-- A Codex implementation workflow ends with a **ready-for-review** pull request, the controlling issue transitioned from `in-progress` to `review-ready`, and a handoff.
-- Executors and independent reviewers must not merge or enable auto-merge on their own authority.
-- Merge requires a later explicit user-facing instruction after review finds no material blocker.
+- Keep changes scoped and use explicit paths.
+- Agent-created commits follow `codex-github-operations` conventions.
+- Do not rewrite shared valid history without explicit authority. The standing exception is the executor-owned `codex/issue-N` branch, before `review-ready`, using the exact-old-head `--force-with-lease` integration-rebase protocol.
+- Direct commits to default branch require explicit user instruction except the narrow wiki-curator authority and one-time bootstrap authority.
+- An implementation workflow ends with a ready PR and `review-ready` handoff to audit.
+- Before handoff, an epic child executor performs the final integration-freshness gate: if integration advances, reconcile/revalidate/republish and require fresh exact-head CI until stable.
+- Replacing `in-progress` with `review-ready` is the executor's final GitHub mutation. Afterward only local teardown/bookkeeping/response composition is allowed until another controller returns it to execution.
+- Outside the positive `codex-pr-audit` path, merge requires a later explicit user-facing instruction after review finds no material blocker.
 
 ## Project-specific additions
 
-Repositories created from this template should add only the domain-specific invariants that genuinely apply to that project, for example:
-
-- language/runtime and coding constraints;
-- ownership, lifetime, concurrency, or security invariants;
-- required build/test/evaluation paths;
-- external dependency or licensing constraints;
-- hardware/runtime execution requirements;
-- project-specific correctness or performance hard failures;
-- explicit planning/epic authority when the project uses one.
-
-Keep these additions declarative and repository-wide. Put reusable procedures in skills and task-specific detail in issues rather than growing this file into a second workflow manual.
+Repositories created from the template should add only genuine domain-specific repository-wide invariants: language/runtime/coding constraints, ownership/lifetime/concurrency/security invariants, required validation paths, dependency/licensing constraints, hardware requirements, correctness/performance hard failures, or explicit planning authority. Keep reusable procedure in skills and task detail in issues.

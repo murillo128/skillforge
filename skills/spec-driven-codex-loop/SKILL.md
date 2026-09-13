@@ -1,208 +1,123 @@
 ---
 name: spec-driven-codex-loop
-description: Execute an approved controlling issue through bounded implementation, repository-native validation, publication, independent review, and a review-ready handoff.
+description: Execute an approved controlling issue through bounded implementation, repository-native validation, publication, integration stabilization, and a review-ready handoff.
 ---
 
 # Spec-Driven Codex Loop
 
 ## Responsibility
 
-Use this skill for non-trivial implementation under an approved controlling issue. The issue is the complete task-specific contract; repository documents define durable architecture and project-wide constraints; branches and PRs preserve implementation; tests and technical evidence preserve observed behavior.
+Use this skill for non-trivial implementation under an approved controlling issue. The issue is the task-specific contract; repository documents define durable architecture and project-wide constraints; branches/PRs preserve implementation; tests and evidence preserve observed behavior.
 
-The executor owns implementation, validation, commits, progression through technical review, and handoff. Delegate GitHub mutations to `codex-github-operations` and checkpoint/final review to `codex-independent-review`. The executor may not review its own work independently.
+The executor owns implementation, validation, commits, publication, explicitly issue-declared intermediate review checkpoints, and handoff. Delegate GitHub mechanics to `codex-github-operations` and intermediate independent review to `codex-independent-review`. The executor may not independently review its own work.
 
-The executor's terminal delivery state is a PR that is **ready for review** and a controlling issue labeled `review-ready`, not merged. It must not merge the PR, enable auto-merge, or treat a technical review verdict as merge authorization. Merge acceptance belongs to a later explicit user-facing review-and-merge interaction.
+The terminal delivery state is a **ready-for-review PR** and issue state `review-ready`, not merged. Do not invoke a duplicate final independent review merely to reach that state: `codex-pr-audit` owns the final independent review and verdict-derived completion path.
+
+This skill does not execute an epic parent. If the controlling issue declares `execution_mode: epic-dag`, route to `codex-epic-scheduler` instead.
 
 ## Context and authority
 
-Load once:
+Load `AGENTS.md`, the controlling issue and only top-level comments needed to resolve execution context, exact authoritative design/source/test/config/evidence needed for the current outcome, and only the skill that owns the current action. Do not weaken the issue or silently promote exploratory material into requirements. Missing material design returns to design authority.
 
-1. `AGENTS.md` when present;
-2. the controlling issue;
-3. only the exact plan, decision, source, test, build, configuration, dependency, artifact, or external input needed by the active outcome;
-4. only the workflow or utility skill that owns the current action.
+On resume, verify branch, `HEAD`, worktree, single workflow-state label, canonical execution context when present, and new material issue/PR discussion. Reuse already inspected facts while their source identity is unchanged.
 
-Do not weaken the issue, reconstruct its intent from broad history, or choose between materially different implementations when the issue is silent. Return to design instead.
+## Canonical execution context
 
-Do not silently promote exploratory notes, hypotheses, brainstorming, or provisional chat conclusions into requirements. Use them only when the controlling issue or an authoritative repository source explicitly adopts them.
+Search top-level controlling-issue comments for exact marker:
 
-On resume, verify branch, `HEAD`, worktree, the controlling issue's single authoritative state label, and new material issue or PR discussion since the last handoff. Reuse unchanged inspected context rather than replaying history.
+```text
+<!-- codex-execution-context:v1 -->
+```
 
-## Skillforge local-runner entry
+With zero matches, treat the issue as standalone: PR target is repository default branch and do not infer an epic parent. With exactly one match, parse exactly one usable `epic_issue`, `integration_branch`, and full 40-hex `base_sha`. The context is authoritative only for execution base and PR target; child body remains authoritative for technical scope/acceptance. More than one or malformed required fields fails closed.
 
-When `SKILLFORGE_LOCAL_RUNNER=1`, the launcher has already established the executor's repository isolation before Codex starts.
+Validate that `integration_branch` exists, contains `base_sha` in history, and `epic_issue` exists and differs from the child. Ordinary forward branch movement is valid; rewritten history that drops `base_sha` is a control-plane defect.
 
-Treat the supplied local-runner context as an execution lease:
+### Prepare issue branch from pinned base
 
-- current working directory must resolve to `SKILLFORGE_ISSUE_WORKTREE`;
-- current branch must equal `SKILLFORGE_ISSUE_BRANCH`, normally `codex/issue-N`;
-- that worktree/branch belongs to the controlling issue for this execution;
-- a retry may contain unfinished state from an earlier attempt and must inspect/adopt it deliberately rather than replacing it.
+Implementation remains on executor-owned `codex/issue-N`. Before first implementation edit of an activation:
 
-Before editing, fail closed if the working directory, branch, repository identity, or controlling issue does not match that lease.
+1. fetch integration branch and exact pin;
+2. require a clean worktree before automatic reconciliation; inspect/preserve any existing issue work;
+3. fast-forward an untouched issue branch to `base_sha` when possible;
+4. when valid issue commits already exist and the pin is not their ancestor, merge exact `base_sha` rather than resetting/discarding those commits;
+5. resolve only conflicts within existing issue authority; semantic conflict needing a new decision returns to `design-required`;
+6. verify `base_sha` is an ancestor of resulting issue `HEAD`.
 
-Do **not** create another worktree, switch to the durable coordination clone, switch to the default branch, invent a second implementation branch, or reset/discard pre-existing issue work merely because the session was launched by automation. The persistent issue worktree is the correct workspace.
+This is the activation rule. Final integration freshness may later rebase the executor-owned branch through the exact-lease procedure owned by `codex-github-operations` while the issue is still `in-progress`.
 
-The local-runner GitHub Actions job ends shortly after launching this interactive Codex session. Therefore:
+## Local-runner execution lease
 
-- Actions job success means only that the session was launched, not that the issue succeeded;
-- do not depend on `GH_TOKEN`, `GITHUB_TOKEN`, `CI`, or `GITHUB_ACTIONS` being present;
-- those Actions-specific variables are intentionally removed from the detached session;
-- Git/GitHub operations must use the persistent host transports described by `codex-github-operations`;
-- do not attempt to recover, persist, or reuse an Actions job token from runner state or logs.
+When `SKILLFORGE_LOCAL_RUNNER=1`, require current directory to equal `SKILLFORGE_ISSUE_WORKTREE`, current branch to equal `SKILLFORGE_ISSUE_BRANCH`, repository identity to match, and the worktree/branch to belong to the controlling issue. A retry may contain unfinished prior issue state; inspect/adopt it rather than replacing it.
 
-This local-runner entry changes only workspace/control-plane mechanics. Scope, validation, review, PR, and merge rules remain exactly the normal executor rules below.
+Do not create another worktree, switch to the durable coordination clone/default branch, invent a second implementation branch, or reset valid issue work. The Actions job only launches the long-lived App Server turn; its success is not issue success. Detached execution intentionally has no Actions token and must use persistent transports defined by `codex-github-operations`.
 
-## Entry gate and workflow state
+## Entry gate and state
 
-Before editing, confirm:
+Before editing require exactly one workflow-state label, `execution-ready` or `in-progress`; safe branch/worktree; absent or uniquely valid canonical execution context with required pinned-base preparation; clear scope/invariants/acceptance/inputs; and no competing ownership.
 
-- exactly one state label exists;
-- it is `execution-ready` or `in-progress`;
-- branch and worktree are safe;
-- scope, invariants, failure semantics, acceptance, and required inputs are clear;
-- no competing branch or PR creates ambiguous ownership.
+If already `review-ready`, implementation has been handed to audit. Do not resume unless audit or explicit authority returns the issue to executable state.
 
-If the issue is already `review-ready`, the previous executor has handed implementation off for user-facing review. Do not resume or mutate implementation merely because a session was restarted; require an explicit correction/re-execution instruction that moves the issue back to an executable state.
-
-Before the first implementation edit, use `codex-github-operations` to replace `execution-ready` with `in-progress`. Do not post a comment solely for this transition.
-
-Use label replacements for execution-time returns:
-
-- missing material design decision: `design-required`;
-- evidence needed before design: `investigation-required`;
-- genuinely unavailable external capability: `blocked`.
-
-`review-ready` is the successful executor handoff state. Set it only when the complete implementation has passed required validation and final-capable independent review, the PR is marked ready for review, and the final handoff is being made. `completed` is a post-merge state. The Codex executor must not set `completed` or close the controlling issue as part of implementation delivery. After an explicit user-facing review accepts and merges the ready PR, the merge workflow may replace `review-ready` with `completed` and close the issue after observing the merge.
-
-By default, add comments only when a material reason, technical finding, contract amendment, exact checkpoint target/verdict, blocker capability, or final handoff must be preserved. A calling workflow may explicitly request additional progress-observability comments; when it does, follow that narrow reporting policy without treating progress comments as checkpoints or technical evidence.
+Before first implementation edit, replace `execution-ready` with `in-progress` without a state-only comment. Runtime returns are `design-required` for missing material design, `investigation-required` for required evidence before design, and `blocked` only for a genuinely unavailable external capability. Executor never sets `completed` or closes the issue.
 
 ## Execution loop
 
-### 1. Establish the bounded outcome
+### 1. Establish bounded outcome
 
-Confirm intended behavior, permitted subsystem, invariants, required validation/evidence, and next checkpoint. Do not combine unrelated work.
+Confirm intended behavior, permitted subsystem, invariants, validation/evidence, execution target, and any explicit intermediate checkpoint. Do not combine unrelated work or invent project-wide machinery.
 
-Do not invent project-wide roadmaps, phases, schemas, frameworks, or process machinery as a side effect of executing one issue. Create durable structure only when the controlling issue or an explicit repository decision requires it.
+### 2. Implement smallest coherent delta
 
-### 2. Implement the smallest coherent delta
+Follow the issue and accepted architecture, preserve behavior outside scope, add tests/evaluation coverage when required, use repository-native integration, avoid unrelated cleanup, and stop when evidence invalidates the contract.
 
-- follow the issue and accepted architecture;
-- preserve baseline behavior outside scope;
-- add tests or evaluation coverage with implementation when required;
-- use repository-native integration;
-- avoid unrelated cleanup and formatting;
-- stop when evidence invalidates the design or acceptance strategy.
+### 3. Handle dependencies deliberately
 
-Commits should represent reviewable outcomes. Mechanical substeps do not need separate commits.
-
-### 3. Handle dependencies and external inputs deliberately
-
-For submodules, vendored code, external repositories, packages, datasets, generated artifacts, or other versioned inputs:
-
-- preserve the identities required by the issue;
-- respect licensing, provenance, and redistribution requirements;
-- update inputs only at coherent implementation or review boundaries when identity matters;
-- publish any external target another actor must inspect;
-- never present unavailable or ambiguous dependency state as a review target.
+Preserve identities/provenance/licensing of submodules, vendored code, external repositories/packages/datasets/artifacts. Update only at coherent boundaries and never present unavailable/ambiguous dependency state as a review target.
 
 ### 4. Validate honestly
 
-Prefer repository-native build, test, lint, type-check, evaluation, and benchmark commands. Disposable diagnostics are acceptable during investigation; durable required validation should use the approved project path.
+Prefer repository-native build/test/lint/type/evaluation/benchmark paths. Run required and risk-appropriate focused checks; record material deviations/environment limits; never claim an unrun check passed. Local implementation failures are corrected in scope rather than labeled external blockers.
 
-Run required and useful narrower checks. Record material deviations, environmental limits, and checks not run. Never claim an unrun check passed. A local implementation failure is corrected within scope; it is not an external blocker.
+Any final integration rebase/conflict resolution creates a new candidate head. Rerun affected focused validation and require fresh exact-head CI/check evidence; do not reuse pre-rebase CI as final evidence.
 
-### 5. Retain evidence proportionally
+### 5. Retain proportional evidence
 
-Keep enough technical evidence to support the claim being made. This may include configuration, dependency identities, commands, results, metrics, artifacts, and limitations.
-
-Do not add workflow bookkeeping to technical artifacts unless it is itself relevant to the tested system. Large generated artifacts, caches, binaries, datasets, traces, and bulky logs belong outside Git unless the repository explicitly defines otherwise.
+Keep enough technical evidence for the claim without committing bulky generated outputs/caches/binaries/datasets/traces unless explicitly required and distributable. Keep GitHub bookkeeping out of technical artifacts unless it is itself a test input.
 
 ### 6. Publish intentionally
 
-Publish when remote preservation, collaboration, a checkpoint, or PR review requires it. Exact SHAs are useful for review targets and dependency pins, not routine progress prose.
+Use `codex-github-operations`. When canonical context exists, PR target must equal `integration_branch`; retarget an executor-owned reusable PR if necessary before trusting diff/CI/review. Update durable docs only when durable knowledge changes.
 
-Update durable repository documents only when the durable content they own changes. Do not edit architecture, plans, decision records, guidelines, or knowledge documents merely to mirror workflow state.
+### 7. Stabilize against integration branch
 
-## Comments and progress observability
+This gate applies only with one valid canonical `integration_branch`, after candidate PR head publication and before PR ready/`review-ready`.
 
-By default, comment only when:
+1. Fetch current remote integration branch and remote issue branch. Capture integration tip and candidate/remote issue heads.
+2. Require issue still open with sole state `in-progress`, one matching PR targeting intended integration base, clean worktree, and remote issue head equal local candidate.
+3. If integration tip is already ancestor of candidate, no rewrite is needed. Otherwise require canonical `base_sha` still ancestor of integration tip.
+4. Ask `codex-github-operations` to rebase issue-owned commits onto exact integration tip and publish with exact old-head `--force-with-lease`; never force integration branch.
+5. Resolve conflicts only within issue authority; otherwise return to design.
+6. After rebase rerun affected validation and obtain fresh exact-head CI/checks while PR remains draft.
+7. Fetch integration branch again after required checks. If its tip changed, repeat.
+8. Gate is stable only when required evidence belongs to the current candidate and the integration tip is still the same tip used for stabilization.
 
-- a checkpoint is ready;
-- scope or acceptance changes;
-- a material failure, blocker, design return, or investigation return needs its cause preserved;
-- final handoff is ready.
+Do not busy-poll CI/branch state. Use normal blocking waits and recheck at material completion boundaries. Standalone issues skip this integration loop.
 
-Use:
+## Intermediate review checkpoints
 
-```markdown
-## <Checkpoint ready | Contract amendment | Design required | Investigation required | Blocked | Ready for review>
+Executor-side independent review exists only for a **material intermediate checkpoint explicitly required by the issue**. Publish the exact target and evidence, invoke one fresh read-only review, and continue on `PASS`/non-blocking `PASS_WITH_NOTES`. `FAIL` causes bounded correction/design/investigation return; `BLOCKED` is only genuine unavailable review/evidence capability.
 
-**Delivered or confirmed:** <one to three bullets>
-**Validation:** <result or evidence>
-**Material issue:** <none or concise finding>
-**Next:** <one bounded action>
-```
+Do not create a final checkpoint merely because implementation finished; final review belongs to `codex-pr-audit` after handoff.
 
-At a checkpoint, include the exact published target and any dependency revision needed for review.
-
-When a calling workflow explicitly requests progress observability, concise progress comments are additionally allowed or required at the phase boundaries defined by that caller. Such comments must remain operational rather than evidentiary: they report what is running, what just finished, coarse progress when cheaply available, and what comes next.
-
-Progress-observability comments:
-
-- do not require a published review target;
-- do not trigger independent review;
-- do not change issue scope, acceptance, or workflow state;
-- do not replace normal checkpoint, blocker, design/investigation-return, or final-handoff comments;
-- should not reproduce logs or emit per-item/per-step chatter.
-
-## Review checkpoints
-
-At a declared checkpoint:
-
-1. publish the exact target;
-2. provide scope, material risks, acceptance criteria, and relevant evidence;
-3. invoke one fresh independent review;
-4. continue only after `PASS` or non-blocking `PASS_WITH_NOTES`.
-
-A checkpoint may serve as final technical review when it covers the complete final diff and all remaining acceptance criteria. Any later technical change invalidates that verdict; workflow-only changes do not. A final technical verdict never authorizes merge by itself.
-
-Progression:
-
-- `PASS`: continue with `in-progress`; if this was the final-capable review and all implementation work is complete, prepare the PR and final issue handoff for user-facing review;
-- `PASS_WITH_NOTES`: continue unless a note violates an exit gate; if final-capable and non-blocking, prepare the PR and final issue handoff for user-facing review;
-- `FAIL`: choose a bounded correction, `design-required`, or `investigation-required`;
-- `BLOCKED`: set `blocked` only when required evidence/review capability has no safe alternative;
-- transport failure: use another route or leave a precise handoff; it is not an implementation verdict.
-
-Do not mechanically implement every reviewer suggestion.
-
-## Repeated-review circuit breaker
-
-After two consecutive failures in substantially the same validation, attestation, parser, documentation-sync, or bookkeeping mechanism, stop compensating patches and return to design authority before a third cycle unless the defect is materially different. This never waives a continuing technical defect.
-
-## Pull request discipline
-
-Use one PR per controlling issue unless the issue explicitly decomposes delivery. Keep it draft while required implementation, validation, or independent technical review remains incomplete.
-
-When the complete final diff has passed the required validation and final-capable independent review, update the PR description with the final technical state, mark the PR **ready for review**, use `codex-github-operations` to replace the controlling issue's `in-progress` label with `review-ready`, and then stop execution and hand it off. The label transition and PR readiness are one logical handoff: do not advertise `review-ready` while the PR is still draft or required technical work remains.
-
-The Codex executor must never:
-
-- merge the PR;
-- enable auto-merge;
-- interpret `PASS` / `PASS_WITH_NOTES`, issue acceptance criteria, CI success, or a final-capable checkpoint as merge authorization;
-- close the controlling issue or set it to `completed` before an explicit user-facing review accepts and merges the PR.
+After two consecutive failures in substantially the same validation/attestation/parser/documentation-sync/bookkeeping mechanism, return to design before a third cycle unless the defect is materially different.
 
 ## Handoff
 
-Include only what the next actor cannot derive cheaply:
+When complete final diff has required validation, all declared intermediate checkpoints are satisfied, and integration freshness is stable when applicable:
 
-- controlling issue, now labeled `review-ready`, and current bounded outcome;
-- ready-for-review PR and exact final reviewed target when useful;
-- last accepted checkpoint;
-- material evidence;
-- unresolved non-blocking note or finding;
-- immediate next action: user-facing review and merge decision.
+1. update PR description with final technical state;
+2. mark PR ready for review;
+3. replace issue `in-progress` with `review-ready` as the executor's **final GitHub mutation**;
+4. verify handoff and stop.
 
-Do not continue past this handoff unless a later explicit instruction requests review, correction, or merge.
+Do not merge, enable auto-merge, close the issue, set `completed`, or continue mutating GitHub after `review-ready`. The immediate next action is `codex-pr-audit`.

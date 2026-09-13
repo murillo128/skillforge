@@ -1,19 +1,31 @@
-name: Execute execution-ready issue with local Codex
+name: Execute issue with local Codex
 
 on:
-  issues:
-    types: [labeled]
+  workflow_call:
+    inputs:
+      issue_number:
+        description: Controlling issue number to launch or resume
+        required: true
+        type: string
+      issue_title:
+        description: Controlling issue title used to name a new thread
+        required: false
+        type: string
+      wait_for_existing_turn:
+        description: Wait for an active turn and serialize a follow-up turn
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: codex-${{ github.repository }}-issue-${{ github.event.issue.number }}
+  group: codex-${{ github.repository }}-issue-${{ inputs.issue_number }}
   cancel-in-progress: false
 
 jobs:
   execute:
-    if: github.event.label.name == 'execution-ready'
     runs-on: [self-hosted, codex]
 
     steps:
@@ -21,7 +33,7 @@ jobs:
         id: worktree
         shell: bash
         env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
@@ -51,6 +63,24 @@ jobs:
           repo_key="${GITHUB_REPOSITORY//\//-}"
           worktree="${worktree_base}/${repo_key}/issue-${ISSUE_NUMBER}"
           branch="codex/issue-${ISSUE_NUMBER}"
+          branch_ref="refs/heads/${branch}"
+
+          mapfile -t registered_worktrees < <(
+            git -C "$repo_root" worktree list --porcelain | awk -v ref="$branch_ref" '
+              /^worktree / { path = substr($0, 10) }
+              $0 == "branch " ref { print path }
+            '
+          )
+          if [ "${#registered_worktrees[@]}" -gt 1 ]; then
+            printf 'Branch %s is registered in multiple worktrees:\n' "$branch" >&2
+            printf '  %s\n' "${registered_worktrees[@]}" >&2
+            exit 1
+          fi
+          if [ "${#registered_worktrees[@]}" -eq 1 ]; then
+            worktree="${registered_worktrees[0]}"
+            echo "Adopting registered issue worktree: $worktree"
+          fi
+
           mkdir -p "$(dirname "$worktree")"
 
           if git -C "$worktree" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -83,8 +113,9 @@ jobs:
       - name: Launch controlling issue through shared Codex App Server
         shell: bash
         env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_TITLE: ${{ inputs.issue_title }}
+          WAIT_FOR_EXISTING_TURN: ${{ inputs.wait_for_existing_turn }}
           SKILLFORGE_REPO_ROOT_RESOLVED: ${{ steps.worktree.outputs.repo_root }}
           SKILLFORGE_ISSUE_WORKTREE: ${{ steps.worktree.outputs.path }}
           SKILLFORGE_ISSUE_BRANCH: ${{ steps.worktree.outputs.branch }}
@@ -97,7 +128,7 @@ jobs:
           socket_path="${SKILLFORGE_CODEX_APP_SERVER_SOCKET:-${codex_home}/app-server-control/app-server-control.sock}"
           if [ ! -S "$socket_path" ]; then
             echo "Codex App Server control socket is unavailable: $socket_path" >&2
-            echo "Connect this host/project from Codex Remote Control so Desktop owns the remote App Server, then retry the execution-ready transition." >&2
+            echo "Connect this host/project from Codex Remote Control so Desktop owns the remote App Server, then retry the issue transition." >&2
             exit 1
           fi
 
@@ -136,8 +167,15 @@ jobs:
 
           if process_from_pid_file_is_alive "$pid_file" "$client"; then
             existing_pid="$(cat "$pid_file")"
-            echo "Codex App Server client for issue #${ISSUE_NUMBER} is already running as pid ${existing_pid}; refusing a duplicate launch."
-            exit 0
+            if [ "$WAIT_FOR_EXISTING_TURN" != "true" ]; then
+              echo "Codex App Server client for issue #${ISSUE_NUMBER} is already running as pid ${existing_pid}; refusing a duplicate launch."
+              exit 0
+            fi
+            echo "Codex App Server client for issue #${ISSUE_NUMBER} is running as pid ${existing_pid}; waiting to serialize the requested follow-up turn."
+            while process_from_pid_file_is_alive "$pid_file" "$client"; do
+              sleep 2
+            done
+            echo "Previous Codex turn for issue #${ISSUE_NUMBER} finished; launching the queued follow-up turn."
           fi
 
           rm -f "$pid_file" "$ready_file" "$error_file" "$completed_file" "$turn_file"
@@ -421,7 +459,7 @@ jobs:
                       "thread/resume",
                       {
                           "threadId": thread_id,
-                          "cwd": REPO_ROOT,
+                          "cwd": WORKTREE,
                           "excludeTurns": True,
                           "approvalPolicy": "on-request",
                           "approvalsReviewer": "auto_review",
@@ -438,7 +476,7 @@ jobs:
                   started = client.request(
                       "thread/start",
                       {
-                          "cwd": REPO_ROOT,
+                          "cwd": WORKTREE,
                           "approvalPolicy": "on-request",
                           "approvalsReviewer": "auto_review",
                           "sandbox": "workspace-write",
@@ -457,7 +495,7 @@ jobs:
                       "thread/name/set",
                       {"threadId": thread_id, "name": display_name},
                   )
-                  log("thread_started", threadId=thread_id, name=display_name, cwd=REPO_ROOT)
+                  log("thread_started", threadId=thread_id, name=display_name, cwd=WORKTREE)
 
               client.thread_id = thread_id
               prompt = f"Execute GitHub issue #{ISSUE_NUMBER} according to AGENTS.md."
@@ -503,7 +541,7 @@ jobs:
           chmod 700 "$client"
 
           RUNNER_TRACKING_ID="" nohup setsid -w \
-            env \
+            env -u GH_TOKEN -u GITHUB_TOKEN -u CI -u GITHUB_ACTIONS \
               SKILLFORGE_APP_SERVER_SOCKET="$socket_path" \
               SKILLFORGE_STATE_DIR="$state_dir" \
               SKILLFORGE_REPO_ROOT_RESOLVED="$SKILLFORGE_REPO_ROOT_RESOLVED" \

@@ -2,50 +2,40 @@
 
 A reusable GitHub repository template for skill-driven agentic software development.
 
-Skillforge separates project concerns deliberately:
-
-- `AGENTS.md` — repository-wide agent invariants and skill routing;
-- `skills/` — reusable development, execution, review, GitHub, orchestration, local-runner, wiki-curation, and one-time bootstrap procedures;
-- `docs/` and other project documentation — deliberate/normative project knowledge when the project defines it as such;
-- `wiki/` — optional agent-generated derived project memory, created and organized by the repository curator;
-- GitHub issues — task-specific contracts and actionable findings.
+Skillforge separates responsibilities deliberately: `AGENTS.md` owns repository-wide invariants/routing; `skills/` owns reusable procedure; project documentation owns durable project knowledge; `wiki/` is optional derived non-normative memory; and GitHub issues own bounded execution contracts/actionable findings.
 
 ## Starting a project
 
-When creating a repository from this template, run `skills/repository-bootstrap/SKILL.md` **once** before normal non-trivial project work.
+A repository created from this template runs `skills/repository-bootstrap/SKILL.md` once before normal non-trivial work. Bootstrap verifies the required workflow labels (including `queued` for epic children), replaces this template README with the actual project's README, adapts project-specific AGENTS invariants, hard-checks its narrow publication boundary, commits initialization atomically to default branch, and removes itself. Local runner setup is opt-in and happens only as a separate post-bootstrap handoff.
 
-The bootstrap:
+The canonical `murillo128/skillforge` template retains bootstrap and must never bootstrap or provision a repository runner against itself.
 
-1. verifies or creates the required Skillforge workflow labels plus `curator-detected`;
-2. replaces this template README with the actual project's README;
-3. adapts `AGENTS.md` with only established project-specific repository invariants;
-4. performs a hard scope check so bootstrap cannot touch unrelated project files;
-5. commits the completed initialization directly to the default branch as one coherent bootstrap commit;
-6. deletes `skills/repository-bootstrap/` and removes its own references from `AGENTS.md` and `README.md`;
-7. if explicitly requested, hands off after successful repository bootstrap to `skills/codex-local-runner/SKILL.md` to configure a local self-hosted Codex runner.
+## Issue workflow automation
 
-Local runner setup is **opt-in** and is not required for a valid repository bootstrap. A failed or incomplete repository bootstrap must **not** self-remove, so it can be retried safely. The canonical `murillo128/skillforge` template repository itself must retain the bootstrap skill and must never execute either its bootstrap or local-runner provisioning against itself.
+Skillforge uses one public issue-state dispatcher: `.github/workflows/codex-issue-state.yml`. It is the only workflow that reacts to `issues:labeled` and routes state transitions to reusable internal workflows:
 
-After bootstrap, the new repository should no longer contain Skillforge bootstrap instructions: its README and agent instructions should describe the actual project.
+- `execution-ready` launches/resumes the controlling issue through `.github/workflows/codex-execute-ready.yml`;
+- `review-ready` launches an isolated exact-head PR audit through `.github/workflows/codex-review-ready.yml`;
+- `completed` or deliberately restored `queued` on an epic child wakes the unique active parent whose canonical DAG contains that child.
 
-## Optional local Codex executor
+The executor and auditor use a repository self-hosted runner labeled `codex` and the Codex App Server already shared with Desktop Remote Control. The dispatcher itself may run on GitHub-hosted infrastructure for control-plane routing.
 
-Skillforge includes `.github/workflows/codex-execute-ready.yml` plus `skills/codex-local-runner/SKILL.md`.
+Local runner infrastructure is optional. Without a matching self-hosted runner, the template remains valid but execution/audit jobs cannot run locally. `skills/codex-local-runner/SKILL.md` installs or repairs the repository-scoped runner only when explicitly requested; it never creates API keys or exposes inbound services.
 
-The workflow listens for GitHub issue label changes and makes its local execution job eligible only when the newly applied label is exactly `execution-ready`. It targets a repository self-hosted runner labeled `codex`, checks out the repository, and launches Codex with the controlling issue number. The normal `AGENTS.md` and issue-driven Skillforge workflow remain authoritative.
+## Epic DAG execution
 
-The workflow can be inherited by every repository created from the template without requiring local infrastructure. Without a matching self-hosted runner, it cannot execute code on a local machine. Runner installation is deliberately separate and must be explicitly requested during bootstrap or invoked later through `codex-local-runner`.
+An epic is designed as a small parent seed plus self-contained child issues. The parent seed declares `execution_mode: epic-dag`, a child issue list, a parallelism limit, and optionally an integration branch. **The DAG is not pre-generated during design.**
 
-The runner skill installs or repairs the official GitHub Actions runner on the target machine, registers it to the exact repository, preserves the existing local Codex authentication, installs it as a persistent service, and verifies that GitHub sees it online with the expected labels. It does not create OpenAI API keys, expose inbound ports, or trigger a dummy issue as a test.
+On the parent's first scheduler execution, `skills/codex-epic-scheduler/SKILL.md` reads all child contracts, derives the minimal direct dependency graph and serialization mutexes, validates it, initializes the integration branch when needed, and persists one canonical `codex-epic-dag:v1` parent comment. The parent then becomes `in-progress` and the scheduler activates the first deterministic dependency-ready wave.
+
+Later wake-ups reconstruct state from GitHub labels plus that canonical graph. Selected children receive canonical execution context (epic, integration branch, exact base SHA) before moving from `queued` to `execution-ready`. The scheduler itself never implements, reviews, or integrates child work.
+
+## Review and completion
+
+Ordinary executors stop at a ready PR plus `review-ready`. The final review is performed in a fresh isolated audit context through `codex-pr-audit`/`codex-independent-review`. A positive final-capable exact-head audit has standing authority to merge that exact head, expose `completed`, and close the controlling issue. Audit failure returns the issue to execution; integration drift returns it for reconciliation without fabricating a technical failure.
 
 ## Optional derived wiki
 
-Skillforge includes `skills/repository-wiki-curation/SKILL.md` for maintaining a project-specific `wiki/**` from repository and GitHub evidence.
+`skills/repository-wiki-curation/SKILL.md` maintains optional `wiki/**` derived from repository/GitHub evidence. The wiki is non-normative. The curator may publish only `wiki/**` directly to default branch after adversarial review and a fail-closed path boundary; actionable discrepancies go to GitHub issues labeled `curator-detected`.
 
-The wiki is intentionally **derived and non-normative**. Its internal structure is not prescribed by Skillforge: the curator may create and evolve whatever thematic organization best represents the project.
-
-The curator has standing ownership of `wiki/**` only. It may publish wiki changes directly to the default branch, but only after a mandatory adversarial review and a fail-closed hard gate proving that the complete publication touches no path outside `wiki/**`.
-
-Actionable discrepancies or unresolved decisions are not stored as a wiki backlog. The curator routes them to GitHub issues; every new issue it creates must carry `curator-detected` so its origin is visible.
-
-The core Skillforge workflow should remain generic. Project truth belongs in the project that uses the template.
+The core template remains generic. Project truth belongs in each repository created from it.

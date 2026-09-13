@@ -1,261 +1,127 @@
 ---
 name: codex-local-runner
-description: Install, repair, and verify the optional repository-scoped GitHub Actions bridge that launches Skillforge issue turns through the Codex App Server already shared with Desktop Remote Control.
+description: Install, repair, and verify the optional repository-scoped GitHub Actions bridge that launches Skillforge execution and audit turns through the Codex App Server shared with Desktop Remote Control.
 ---
 
 # Codex Local Runner
 
 ## Responsibility
 
-Use this skill to provision or repair Skillforge's optional host-side execution bridge.
+Use this skill to provision or repair Skillforge's optional host-side bridge. The public label entrypoint is `.github/workflows/codex-issue-state.yml`; it is the **only** workflow that reacts to `issues:labeled`. It routes:
 
-The template workflow is `.github/workflows/codex-execute-ready.yml`. Its contract is deliberately narrow:
+- `execution-ready` to `.github/workflows/codex-execute-ready.yml`;
+- `review-ready` to `.github/workflows/codex-review-ready.yml`;
+- `completed` / `queued` child events back to the unique active epic parent when its canonical DAG contains that child.
 
-- react to GitHub `issues:labeled`;
-- make the execution job eligible only when the newly applied label is exactly `execution-ready`;
-- target a repository-scoped runner carrying `self-hosted` and `codex`;
-- never use `actions/checkout` or the runner `_work` checkout as project state;
-- expose the durable local clone through `SKILLFORGE_REPO_ROOT`;
-- create or reuse one persistent worktree and branch `codex/issue-N` per controlling issue;
-- connect to the **existing Codex App Server control socket used by Desktop Remote Control**;
-- create or resume one durable Codex thread for the issue and start the implementation turn in the prepared worktree;
-- leave implementation procedure to `AGENTS.md`, the controlling issue, and the normal Skillforge skills.
+The executor and audit workflows are reusable `workflow_call` workflows. They do not interpret labels themselves. The dispatcher may use a hosted runner for control-plane discovery; only the execution/audit jobs require a repository-scoped self-hosted runner carrying `self-hosted` and `codex`.
 
-GitHub Actions is only the authorization and launch trigger. The actual Codex turn is owned by the shared App Server and continues after the Actions job exits.
+The executor never uses the Actions `_work` checkout as project state. It receives a durable clone through `SKILLFORGE_REPO_ROOT`, creates/reuses one persistent worktree and `codex/issue-N` branch, and connects to the **existing Codex App Server control socket used by Desktop Remote Control**. The audit workflow creates a fresh detached review worktree and fresh App Server thread for the exact PR head.
 
-This skill owns runner installation, registration, service configuration, durable-repository environment wiring, App Server prerequisites, repair, optional scaling, and verification. It does not implement issues or modify project repository files.
+GitHub Actions is authorization/routing/launch infrastructure; the actual model turn is owned by the shared App Server and continues after the Actions job exits.
 
-Never execute this skill against the canonical `murillo128/skillforge` template repository. The template carries the capability for descendants but must not itself acquire a repository runner.
+This skill owns runner installation, registration, service configuration, durable-repository environment wiring, App Server prerequisites, repair, optional scaling, and verification. It does not implement issues or modify repository files.
 
-## Invocation and authority
+Never execute this skill against the canonical `murillo128/skillforge` template repository itself.
 
-Runner provisioning is opt-in.
+## Authority and safety
 
-Explicit invocation of this skill, or an explicit local-runner opt-in passed through `repository-bootstrap`, grants authority only for the host and GitHub control-plane changes required to install, register, repair, start, scale, or verify the target runner installation.
+Runner provisioning is opt-in. Explicit invocation grants only host/GitHub control-plane authority needed to install/register/repair/start/verify the target runner. It does not authorize repository edits, OpenAI API key creation, replacement of existing Codex auth, public listeners/ports, root service execution, removal of unrelated runners/services, or triggering a real issue merely as a test.
 
-That authority does **not** grant permission to:
-
-- modify repository files or workflows;
-- create an OpenAI API key or replace existing Codex authentication;
-- expose inbound ports, webhooks, SSH, or public listeners;
-- run the Actions service as root or an unrelated account;
-- remove unrelated runners or services;
-- trigger an actual `execution-ready` issue merely as a test.
-
-If the expected workflow is missing or materially incompatible, stop and report the mismatch. Repository repair requires separate authority.
+A self-hosted runner executes repository workflow code on the machine. Prefer repository-scoped registration, run it as the intended non-root user who owns the durable clone and Codex remote state, and never persist registration/removal tokens. Before enabling on a public repository, fail closed if untrusted fork/PR-controlled code can target the `codex` runner.
 
 ## Execution topology
 
-Treat the runner application's `_work` directory as disposable runner state, never as the Codex project workspace.
-
-Each repository-scoped runner must expose:
+Treat the Actions runner `_work` tree as disposable infrastructure. Each repository runner exposes:
 
 `SKILLFORGE_REPO_ROOT=<absolute durable local clone>`
 
-It may also expose:
+Optional overrides:
 
-`SKILLFORGE_WORKTREE_ROOT=<absolute persistent worktree parent>`
-`SKILLFORGE_LOG_ROOT=<absolute persistent local event-log parent>`
-`SKILLFORGE_CODEX_APP_SERVER_SOCKET=<optional explicit App Server control socket>`
+`SKILLFORGE_WORKTREE_ROOT=<persistent worktree parent>`
+`SKILLFORGE_LOG_ROOT=<persistent event-log parent>`
+`SKILLFORGE_CODEX_APP_SERVER_SOCKET=<shared App Server Unix socket>`
 
-Defaults are:
+Defaults are `$HOME/.skillforge/worktrees`, `$HOME/.skillforge/logs`, and `${CODEX_HOME:-$HOME/.codex}/app-server-control/app-server-control.sock`.
 
-- worktrees: `$HOME/.skillforge/worktrees`;
-- logs: `$HOME/.skillforge/logs`;
-- App Server socket: `${CODEX_HOME:-$HOME/.codex}/app-server-control/app-server-control.sock`.
+For `<owner>/<repo>` issue `N`, execution uses persistent `codex/issue-N`. A retry validates/adopts the registered worktree rather than discarding unfinished state. The durable clone is coordination state; implementation occurs in issue worktrees.
 
-For repository `<owner>/<repo>` and issue `N`, the workflow prepares a stable issue worktree and branch `codex/issue-N`. A retry validates and adopts that same worktree rather than discarding unfinished state or creating a competing branch.
+### Shared App Server
 
-The durable clone at `SKILLFORGE_REPO_ROOT` is a **shared coordination clone**. Implementation occurs in issue worktrees. Never point `SKILLFORGE_REPO_ROOT` at an Actions `_work` directory.
+For an SSH/Desktop project, Skillforge joins the same remote App Server through its Unix control socket. Do not start a second `codex app-server`, `codex exec`, or TUI as fallback. If the socket is absent/unreachable, restore/reconnect the intended Desktop SSH App Server and retry.
 
-## Shared Codex App Server
+Executor semantics:
 
-For an SSH project, Codex Desktop starts the remote Codex App Server through SSH. The Skillforge launcher must join that same process through its Unix control socket rather than starting a TUI, running `codex exec`, or launching a competing App Server process.
+1. prepare/adopt the issue worktree;
+2. create or resume the issue's durable thread;
+3. start the turn with thread/turn cwd anchored to the issue worktree;
+4. use on-request approvals, workspace-write and network access;
+5. keep a detached WebSocket subscriber connected until matching `turn/completed`;
+6. let Actions exit after `threadId`/`turnId` launch acknowledgement.
 
-Current workflow semantics:
+A scheduler wake may arrive while the parent turn is still active. The reusable executor accepts `wait_for_existing_turn=true` only for this routed follow-up case and serializes the next turn after the active client ends. Ordinary `execution-ready` launches refuse duplicate active turns.
 
-1. create/resume the issue thread through the shared App Server;
-2. create new threads with the durable repository root as the thread `cwd`;
-3. give a new thread the user-facing name `#N — <issue title>`;
-4. start the issue turn with the local execution environment's `cwd` set to the persistent issue worktree;
-5. use `on-request`, `auto_review`, workspace-write, and network access for the implementation turn;
-6. keep a lightweight background WebSocket client subscribed until the matching `turn/completed` event;
-7. let the GitHub Actions job exit as soon as `threadId` and `turnId` are confirmed.
+Audit semantics are deliberately different: every audit attempt gets a fresh detached review worktree pinned to current exact PR head and a fresh App Server thread; it never resumes the executor conversation. The audit launcher removes executor worktree/branch variables and ephemeral Actions tokens before starting the review client.
 
-The root/worktree split is intentional. The durable repo root remains the conversation/project identity, while command execution is isolated in the issue worktree. Do not simplify this by making the worktree the initial thread cwd merely because it is the execution directory.
+The background subscriber is transport, not another model actor. Preserve empty `RUNNER_TRACKING_ID` detachment so it survives Actions cleanup.
 
-The App Server `environments` override used for the turn is an experimental protocol capability. Runner verification must therefore confirm that the installed Codex/App Server version accepts the current workflow contract. A version/protocol mismatch is an infrastructure blocker; do not silently fall back to a different execution topology.
-
-### Keep the initiating connection alive
-
-Do not disconnect the launcher client immediately after `turn/start`.
-
-The background client deliberately remains connected until `turn/completed`. This preserves a stable subscriber/connection for long shell operations and avoids relying on disconnect behavior while a turn is in flight.
-
-The background client is not another model executor. It is only a WebSocket control-plane subscriber/event sink. It does not answer approvals automatically. Approval or user-input requests remain App Server requests and may be handled by another subscribed UI/client, including Desktop, according to normal Codex behavior.
-
-The client must survive GitHub runner process cleanup. Preserve the workflow's use of an empty `RUNNER_TRACKING_ID` for the detached client process.
-
-### Do not create a competing App Server
-
-If the expected Unix control socket is absent or unreachable, fail closed and report it.
-
-Do **not** automatically start another `codex app-server`, `codex exec`, or interactive TUI as a fallback. The purpose of this topology is for Desktop and Skillforge to share one App Server writer/owner. A second App Server defeats that property and can recreate thread ownership and visibility problems.
-
-Reconnect/enable the intended Desktop SSH project or otherwise restore the already-selected shared App Server before retrying the issue transition.
-
-### Desktop project grouping is not authoritative
-
-Generic App Server thread creation and Desktop's saved-project catalog are not currently the same identity system. A thread created through the shared App Server may appear under Desktop **Recents** rather than inside the saved project even when its repository root is correct.
-
-Do not fabricate a second project, mutate Desktop-private databases, or use the issue worktree basename as a project identity in an attempt to repair presentation. Repository identity, Git worktree identity, and exact thread ID are the operational authorities.
-
-This limitation is cosmetic/organizational only if the same thread is live, readable, steerable, and operating in the correct worktree.
-
-## Issue execution state
-
-Host-local state lives under:
-
-`$HOME/.skillforge/run/<owner-repo>/issue-N/`
-
-It may include:
-
-- App Server client PID;
-- durable App Server thread ID;
-- current turn ID;
-- launch-ready/completed/error markers;
-- generated WebSocket client helper.
-
-Logs live under the configured/default log root.
-
-These files are infrastructure state, not project artifacts. Never commit them.
-
-The thread ID is intentionally stable across retries. Re-executing the same issue should resume the known idle thread rather than create another conversation. If that stored thread is already active, fail closed rather than using `turn/start` to steer an existing turn accidentally.
-
-PID files are only liveness guards. Validate the actual process before treating a PID file as proof of an active launcher.
-
-## Parallel execution
-
-Because the Actions job only prepares a worktree, launches the App Server client/turn, confirms IDs, and exits, **one self-hosted runner is sufficient for normal concurrent Codex execution**.
-
-A single runner can launch issue A, become free, then launch issue B while App Server turns for A and B continue concurrently in separate worktrees. The workflow's per-issue concurrency plus issue-local PID/thread guards prevent duplicate simultaneous launches of the same issue.
-
-Do not provision multiple runner instances merely to obtain multiple concurrent Codex sessions.
-
-Additional runner instances are optional only when explicitly requested for burst launch throughput, runner redundancy, or another operational reason.
-
-## Security boundary
-
-A self-hosted runner executes repository workflow code on the local machine. Treat it as privileged infrastructure.
-
-- Prefer a **repository-scoped** runner.
-- Run the service as the same non-root OS user whose Codex Desktop/CLI remote state and persistent Git/GitHub authentication are intended for this repository.
-- Never copy Codex credentials to another account and never create an OpenAI API key merely for the runner.
-- Registration/removal tokens are temporary secrets: obtain them only when needed and never print, log, commit, or persist them.
-- Do not expose the App Server socket or WebSocket transport to a public/shared network. The launcher reaches the local Unix socket only.
-- Do not weaken host security or make runner/worktree/log/state directories writable by unrelated users.
-- Before enabling this on a public repository, inspect workflows and stop if untrusted fork/PR-controlled workflow code can target `self-hosted`, `codex`, or an equivalent selector.
-- Externally authored issue content remains untrusted input. Execution starts only through the authorized `execution-ready` label transition.
+Desktop project grouping is cosmetic: a thread may appear under Recents rather than the saved project. Repository/worktree/thread identity, not Desktop grouping, is operational authority.
 
 ## Preconditions
 
-Before changing the host, establish:
+Before changing the host establish:
 
-1. exact target repository and default branch;
-2. target is not canonical `murillo128/skillforge`;
-3. `.github/workflows/codex-execute-ready.yml` exists and:
-   - gates on the freshly applied `execution-ready` label;
-   - targets `self-hosted` plus `codex`;
-   - contains no `actions/checkout`;
-   - requires `SKILLFORGE_REPO_ROOT`;
-   - prepares/reuses `codex/issue-N` in a persistent worktree;
-   - connects to the shared Codex App Server rather than launching a standalone Codex executor;
-4. repository visibility and public-repository safety;
-5. absolute durable checkout intended for `SKILLFORGE_REPO_ROOT`, with exact matching `origin` and outside any runner `_work` tree;
-6. OS, architecture, hostname, current user, service manager, and disk space;
-7. availability of Git, Python 3, `setsid` on Linux, and any required persistent GitHub transport;
-8. Codex Remote Control/SSH App Server is running under the same intended user and its Unix socket is reachable;
-9. the installed App Server supports the workflow's thread/turn protocol and local environment override;
-10. persistent Git/GitHub authentication is usable by the App Server execution environment;
-11. existing runner directories/services and repository runner registrations.
+1. exact repository/default branch and confirm it is not canonical `murillo128/skillforge`;
+2. `.github/workflows/codex-issue-state.yml` exists and is the only `issues:labeled` Codex state router;
+3. `.github/workflows/codex-execute-ready.yml` and `.github/workflows/codex-review-ready.yml` are reusable `workflow_call` workflows targeting `[self-hosted, codex]` and do not directly interpret label events;
+4. executor path requires `SKILLFORGE_REPO_ROOT`, uses persistent worktrees, and does not use a runner `_work` checkout as implementation state;
+5. durable clone absolute path, exact matching origin, and location outside `_work`;
+6. OS/architecture/hostname/current user/service manager/disk state;
+7. Git, Python 3, `setsid`, `flock` (for audit), and persistent GitHub transport as required;
+8. shared Codex Remote Control App Server socket under the intended user;
+9. installed App Server accepts current thread/turn protocol and environment overrides;
+10. persistent Git/GitHub authentication usable by detached Codex turns;
+11. current runner installations/services/registrations.
 
-For runner registration, prefer an already-authenticated `gh` CLI when available. Registration tokens expire quickly and must never be persisted.
+The hosted dispatcher may use `actions/checkout` only to read its tiny routing helper. That does **not** relax the executor rule: self-hosted model execution must never treat Actions `_work` as project state.
 
-## Idempotent provisioning procedure
+## Idempotent provisioning
 
-### 1. Identify the durable repository and intended runner
+### 1. Identify durable repo and runner
 
-Canonicalize `SKILLFORGE_REPO_ROOT`, verify its `origin`, and verify it is not under an Actions `_work` path.
-
-Use a stable runner name derived from host and repository and one dedicated runner application directory outside the repository. Reuse a healthy existing durable clone and runner when possible.
+Canonicalize `SKILLFORGE_REPO_ROOT`, verify origin and that it is outside `_work`. Use a stable runner name/install directory outside the repository. Reuse healthy installations.
 
 ### 2. Reuse before replacing
 
-Inspect local services and GitHub registrations first. Repair a correct runner rather than creating duplicates. Remove stale registrations only when ownership by the local installation is unambiguous.
+Inspect local service and GitHub registration first. Repair a correct runner rather than creating duplicates. Remove stale registrations only when ownership is unambiguous.
 
-### 3. Obtain and register the official runner securely
+### 3. Register official runner securely
 
-Do not hard-code a runner version. Resolve the current official GitHub Actions runner for the detected OS/architecture and use official assets/instructions.
+Resolve the current official Actions runner for detected OS/architecture; do not hard-code a version. Obtain a temporary repository registration token only at registration time and never print/persist it. Configure exact repo, normal self-hosted labels plus `codex`, persistent/non-ephemeral operation, and normal internal `_work` directory.
 
-Obtain a temporary repository registration token through the authenticated GitHub control plane at registration time. Never echo, persist, or log it.
+### 4. Configure persistent environment
 
-Configure the runner for the exact repository with normal self-hosted labels plus custom `codex`, persistent/non-ephemeral operation, and its normal internal `_work` directory.
+Expose `SKILLFORGE_REPO_ROOT` and optional worktree/log/socket overrides via supported runner `.env` or narrow service environment. Preserve unrelated entries and restart after changes.
 
-### 4. Configure persistent runner environment
+### 5. Install service
 
-Expose `SKILLFORGE_REPO_ROOT`, plus optional worktree/log/socket overrides when required. Prefer the runner's supported `.env` file or a narrow service-manager environment override. Preserve unrelated entries and restart after environment changes.
+Use official runner service mechanism. Run as intended non-root user, active now and enabled at boot.
 
-### 5. Install as a persistent service
+### 6. Verify without model execution
 
-Use the official runner service mechanism. On Linux/systemd use the configured runner's `svc.sh` where applicable.
+Verify service identity/active/boot state; GitHub runner online for exact repo with `self-hosted`/`codex`; environment paths/socket; exact repo origin and harmless fetch; required host tools; shared socket is reachable by intended user; dispatcher has the sole label trigger; reusable executor/audit target the codex runner; executor uses persistent issue worktree and shared App Server; audit uses fresh detached review worktree/session.
 
-The runner service must run as the intended non-root user, be active now, be enabled at boot, and reconnect without an interactive shell.
-
-### 6. Verify without launching a model request
-
-Verify:
-
-- service active, enabled at boot, and running as the intended user;
-- GitHub lists the runner online for the exact repository with `self-hosted` and `codex`;
-- service environment has the correct durable repo/worktree/log/socket configuration;
-- persistent repo origin is exact and a harmless `git fetch` works;
-- Python 3 and `setsid` exist on Linux;
-- the shared App Server socket exists, is a Unix socket, and is owned/reachable by the intended user;
-- workflow has no checkout step and uses the persistent issue worktree plus shared-App-Server topology.
-
-Do not add/remove `execution-ready`, create a dummy issue, or launch a model request merely to verify installation. The first real issue is the end-to-end test.
+Do not create a dummy issue, add/remove workflow labels, or launch a model request merely to test provisioning. The first real transition is the end-to-end test.
 
 ## Repair behavior
 
-Prefer repair over replacement.
+Prefer repair. Wrong `_work` execution means fix `SKILLFORGE_REPO_ROOT`; missing socket means restore Desktop/shared App Server; protocol rejection means repair version compatibility; Recents grouping alone is not a topology defect; active thread without matching launcher fails closed; detached client dying after Actions means verify `RUNNER_TRACKING_ID`; missing GitHub mutations means repair persistent auth rather than persisting Actions token; offline runner means inspect service/network/environment.
 
-- Runner executes from `_work`: repair `SKILLFORGE_REPO_ROOT`; never fall back to `GITHUB_WORKSPACE`.
-- App Server socket missing: restore/reconnect the intended Desktop SSH App Server; do not launch a competing executor as fallback.
-- WebSocket/initialize/thread protocol rejected: verify Codex version/protocol compatibility and repair the version mismatch.
-- Thread created but Desktop groups it under Recents: treat this as the known project-catalog presentation limitation unless thread/worktree identity is actually wrong.
-- Thread active with no matching launcher client: fail closed; do not send a new `turn/start` because that may steer the active turn.
-- Background client dies when the Actions job ends: verify `RUNNER_TRACKING_ID` detachment.
-- Codex can run but cannot mutate GitHub: verify persistent user Git/GitHub authentication; never persist an Actions job token.
-- Offline but correctly registered runner: inspect service/network/environment and repair/restart.
-- Codex/App Server authentication unavailable: report the exact blocker; do not synthesize credentials.
-
-Never interrupt a live App Server issue turn merely to repair the runner service unless explicitly authorized.
+Never interrupt a live model turn merely to repair the runner service without explicit authorization.
 
 ## Bootstrap integration
 
-`repository-bootstrap` may offer this capability only as an **optional post-bootstrap handoff**. Repository bootstrap remains valid without a runner and its file-write hard gate is not widened. Runner setup failure after successful bootstrap is a separate infrastructure failure and may be retried through this persistent skill.
+`repository-bootstrap` may offer runner setup only as an optional **post-bootstrap handoff**. Bootstrap validity never depends on runner presence and its file-write boundary is not widened. Runner failure after successful bootstrap is a separate retryable infrastructure failure.
 
 ## Completion report
 
-Report only:
-
-- target repository and durable repo root;
-- runner name/install directory;
-- service identity, active state, and boot enablement;
-- worktree/log roots and App Server socket path;
-- GitHub runner online/offline state and labels;
-- shared App Server reachable/unreachable state;
-- whether setup reused, repaired, created, or optionally scaled the runner installation;
-- any real authentication, permission, workflow, App Server protocol, or host blocker.
-
-Never include registration tokens, authentication files, secret values, or verbose logs.
+Report target repository/durable root, runner name/install directory, service identity/state/boot enablement, worktree/log/socket paths, GitHub online/labels state, shared App Server reachability, whether setup reused/repaired/created/scaled, and any real auth/permission/workflow/protocol/host blocker. Never report tokens or credential contents.

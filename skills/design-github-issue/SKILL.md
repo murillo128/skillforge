@@ -1,110 +1,82 @@
 ---
 name: design-github-issue
-description: Define a self-contained execution-ready GitHub issue that resolves material decisions and gives a fresh executor the facts needed to implement safely, then explain the designed mechanism separately to the user in chat.
+description: Define a self-contained GitHub execution contract for a standalone issue, epic child, or epic parent seed without leaking design-session reasoning into implementation.
 ---
 
 # Design a GitHub Execution Issue
 
 ## Responsibility
 
-Use this skill before non-trivial implementation starts, or when execution returns because a material design or validation decision is unresolved.
+Use this skill before non-trivial implementation starts, or when execution returns because a material design or validation decision is unresolved. The design authority owns the observable outcome, material architectural and validation decisions, bounded scope, invariants, exclusions, failure semantics, acceptance criteria, and initial workflow state. It does not implement code, operate implementation branches, perform independent review, or authorize an executor to merge.
 
-The design authority owns:
+Design for a fresh executor with no access to hidden chat reasoning. The issue must contain every task-specific fact, decision, constraint, and acceptance rule needed for correct execution. Links supplement the contract; they do not replace material instructions.
 
-- the observable outcome;
-- material architectural and validation decisions required for the bounded task;
-- the task-specific context needed to execute safely;
-- scope, invariants, exclusions, failure semantics, and acceptance criteria;
-- risk-based review checkpoints when useful;
-- the issue's initial readiness and any design-authority state transition;
-- a separate concise explanation to the user of how the designed mechanism works when that helps them understand the project.
+Keep user-facing teaching outside the issue. Technical flow belongs in the issue only when an executor needs it to implement correctly.
 
-It does not implement code, operate branches, publish commits, perform independent review, or grant the executor merge authority.
+## Load only material design context
 
-## Assume a fresh executor
+Start with `AGENTS.md` when present and the user request, roadmap item, or existing controlling issue. Then inspect only the accepted plans/decisions, relevant implementation seams/tests/configuration, baseline evidence, dependencies/artifacts, and plausibly overlapping active work required to settle this task.
 
-Design the issue for an executor that:
+Do not promote exploratory notes, hypotheses, derived wiki text, or provisional chat conclusions into requirements unless an authoritative source explicitly adopts them.
 
-- has no access to the design session's hidden reasoning;
-- should not need to reconstruct material facts from prior chats, issues, or PR history;
-- must be able to distinguish required behavior from examples, observations, alternatives, hypotheses, and future work.
+## Workflow states
 
-The issue must contain every task-specific fact, decision, constraint, and acceptance rule required for correct implementation. Links are supporting references, not substitutes for material instructions.
+Use exactly one current workflow-state label:
 
-A self-contained issue is not an archive. Include the current contract in full; omit chronological narration and generic workflow already owned elsewhere.
-
-## Keep user teaching outside the issue
-
-The GitHub issue is an execution contract for Codex or another implementation agent. Do not add tutorial-style or pedagogical sections solely to teach the user.
-
-After designing or publishing the issue, explain the relevant non-obvious mechanism separately in the assistant's chat response. Focus on end-to-end behavior, define specialized terms when needed, and keep the explanation proportional.
-
-The issue itself may still describe technical data flow, semantics, or component interaction when the executor needs that information to implement correctly. Keep such text contractual and implementation-oriented.
-
-## Design-session traceability
-
-When a ChatGPT design session publishes a new issue:
-
-- if the current private conversation URL is available, add `Design session: [ChatGPT](<private-conversation-url>)` to the initial issue body;
-- never create or use a public/shared ChatGPT link for this provenance; if the private conversation URL is unavailable, omit the link rather than blocking issue publication;
-- after GitHub assigns the issue number, if the environment exposes a supported conversation-title action, rename the current ChatGPT conversation to `#<issue-number> — <issue-title>`;
-- do not add a repository prefix to the conversation title, and do not fail or block the workflow when conversation renaming is unavailable.
-
-This traceability applies only to the design session. Do not add Codex implementation-session identifiers or general session bookkeeping to the issue.
-
-## Load material design context
-
-Start with:
-
-1. `AGENTS.md` when present;
-2. the user request, roadmap item, or existing controlling issue.
-
-Then inspect only what is needed to settle the task:
-
-- exact plans, decisions, specifications, or design notes relevant to the change;
-- relevant source seams, APIs, ownership boundaries, state, and tests;
-- baseline behavior or prior evidence that constrains the work;
-- required hardware, dependencies, external repositories, datasets, artifacts, or environment inputs;
-- overlapping current work and superseded attempts when their findings materially constrain the design.
-
-Prefer authoritative current outcomes over complete historical traversal.
-
-Do not silently promote exploratory notes, hypotheses, brainstorming, or provisional chat conclusions into requirements. They become contractual only when the task explicitly adopts them or the repository's authoritative sources already establish them.
-
-## The issue is the executor's complete contract
-
-Depending on the task, include:
-
-- current limitation and observable goal;
-- accepted baseline behavior and defaults that must remain unchanged;
-- relevant dependencies, artifacts, datasets, or external inputs when they affect the result;
-- inspected implementation seams and data shapes;
-- resolved API or configuration semantics and invalid combinations;
-- ordering, ownership, lifetime, concurrency, failure behavior, and resource constraints where relevant;
-- permitted implementation scope and explicit exclusions;
-- commands, targets, fixtures, environments, and artifacts needed for validation;
-- objective acceptance criteria and material review risks;
-- prior negative evidence when it prohibits repeating a known-invalid mechanism.
-
-Use precise names, paths, values, examples, and equations where they remove ambiguity.
-
-Do not copy generic Git, publication, review, label, merge, or reporting procedure already owned by skills. Do not duplicate chronological histories, complete logs, routine GitHub metadata, or user-oriented teaching content.
-
-An issue may state observable post-merge completion conditions, but it must not authorize the Codex executor to merge or enable auto-merge. The repository workflow owns that boundary: execution delivers a ready-for-review PR and a controlling issue in `review-ready`; a later explicit user-facing review decides whether to merge.
-
-## Readiness
-
-Use exactly one workflow state label:
-
+- `queued`
 - `execution-ready`
+- `in-progress`
+- `review-ready`
 - `design-required`
 - `investigation-required`
 - `blocked`
-- `in-progress`
-- `review-ready`
 - `completed`
 
-At issue publication, set exactly one state label through `codex-github-operations`. The issue body may record **Initial state** for historical context, but the label is authoritative for current state.
+At publication, set exactly one through `codex-github-operations`. A fully designed standalone issue starts at `execution-ready`. A fully designed child that belongs to an epic starts at `queued` so only `codex-epic-scheduler` activates it. Unresolved design, evidence, or external capability uses `design-required`, `investigation-required`, or `blocked` rather than `queued`.
+
+A normal issue must not be published initially as `in-progress`, `review-ready`, or `completed`.
+
+## The issue is the execution contract
+
+Depending on the task, record the current limitation and observable goal; baseline/default behavior that must remain unchanged; relevant dependencies/artifacts/data; accepted APIs/data/control flow; ownership/lifetime/concurrency/failure semantics; permitted implementation scope and explicit exclusions; validation targets and objective pass/fail criteria; material negative evidence; and intermediate checkpoints only when they reduce a distinct technical risk.
+
+Use precise names, paths, values, examples, and equations when they remove ambiguity. Do not copy generic Git, publication, label, audit, merge, or reporting procedure already owned by skills.
+
+The executor's normal successful delivery is a ready-for-review PR plus `review-ready`. Final independent review and verdict-derived completion belong to `codex-pr-audit`; do not make every issue define a duplicate final review checkpoint.
+
+## Epic child design
+
+A child of an epic remains a normal self-contained controlling issue. It must not rely on the parent to define its technical scope or acceptance criteria. The parent may define membership and scheduling, but each child must be executable by a fresh worker once activated.
+
+When fully designed, publish the child as `queued`. Do not precompute or duplicate its eventual `depends_on`, mutex, execution base, or PR target in the child body. The first epic scheduler invocation derives the canonical DAG from all child contracts, and each activation receives canonical execution context separately.
+
+If a child has a real unresolved blocker, use the corresponding manual state rather than `queued`; it can be returned to `queued` after that condition is explicitly resolved.
+
+## Epic parent seed design
+
+An epic parent is a scheduling/integration contract, not a giant technical issue and not a pre-written DAG. Its first execution is owned by `codex-epic-scheduler`.
+
+Before publishing the parent:
+
+1. design every intended child sufficiently that dependency relationships can be inferred from the child contracts without hidden context;
+2. ensure the declared child set is complete for the intended epic scope and contains no accidental duplicates/superseded issues;
+3. choose a conscious parallelism limit;
+4. optionally choose an integration branch name, otherwise accept the scheduler default `codex/epic-issue-<parent-number>`;
+5. put fully designed waiting children in `queued` and leave genuinely unresolved children in their correct manual state;
+6. publish the parent as `execution-ready`.
+
+The parent body contains one compact fenced YAML seed:
+
+```yaml
+execution_mode: epic-dag
+integration_branch: codex/epic-issue-123  # optional
+max_parallel_workers: 4
+child_issues: [124, 125, 126, 127]
+```
+
+Do **not** put generated `depends_on` or mutex data in the seed. On the first scheduler invocation, `codex-epic-scheduler` reads the child contracts, derives a minimal direct dependency graph and mutexes, validates it, initializes the integration branch when necessary, publishes exactly one canonical `codex-epic-dag:v1` parent comment, changes the parent to `in-progress`, and selects the first wave.
+
+After canonical DAG publication, the seed is bootstrap history rather than live graph state. A later graph change is an explicit design repair of the canonical DAG; ordinary scheduler invocations never regenerate it from edited prose.
 
 ## Design method
 
@@ -114,116 +86,54 @@ State what must become true, why it matters, the current limitation, and the bou
 
 ### 2. Resolve material unknowns
 
-Resolve questions that can change behavior, compatibility, architecture, data handling, correctness, failure handling, validation, licensing, security, performance, or deployment strategy.
+Resolve questions that can change behavior, compatibility, architecture, data handling, correctness, failure handling, validation, licensing, security, performance, or deployment. Keep `OPEN`/`SPECULATIVE` material non-contractual until intentionally resolved.
 
-Use these classifications only when useful:
+Do not invent project-wide roadmaps, schemas, frameworks, ontologies, or process machinery merely because they might be useful later.
 
-- `OBSERVED`
-- `ACCEPTED`
-- `OPEN`
-- `SPECULATIVE`
-- `REJECTED`
-- `BLOCKED`
+### 3. Bound implementation
 
-Do not turn `OPEN` or `SPECULATIVE` items into implementation requirements. Record durable cross-task architecture in the repository location that owns durable decisions; keep task-local choices in the issue.
+Define the smallest coherent outcome, permitted subsystem/files, explicit exclusions, and invariants. Name exact seams where an executor could otherwise modify the wrong layer.
 
-Do not invent project-wide roadmaps, phases, schemas, frameworks, ontologies, or process machinery merely because they might be useful later. Introduce persistent structure only when the current task or an explicit repository decision requires it.
+### 4. Define validation
 
-### 3. Bound implementation without under-specifying it
+Specify repository-native build/test/lint/type-check/evaluation/benchmark targets and the correctness, failure, data-integrity, concurrency, security, or performance cases that materially prove the outcome. Use exact commands when invocation details are part of the evidence; otherwise name the target/result without freezing replaceable syntax.
 
-Define the smallest coherent outcome, permitted subsystem or files, explicit exclusions, and invariants. Include exact files or seams when an executor could otherwise modify the wrong layer.
+Never require evidence that the expected environment cannot practically produce unless the task explicitly establishes that capability as a prerequisite.
 
-### 4. Define validation that proves the outcome
+### 5. Add only material intermediate checkpoints
 
-Specify material validation concretely:
+Use independent executor-side checkpoints only when work should not safely continue past a distinct architecture, ownership/lifetime, data integrity, numerical, concurrency, security, backend, or broad-refactor boundary without review. Do not add a final checkpoint merely because implementation ends; `codex-pr-audit` provides the final independent review after `review-ready`.
 
-- repository-native build, test, lint, type-check, evaluation, or benchmark targets;
-- correctness, repeated-run, failure-path, numerical, data-integrity, concurrency, security, or performance checks when relevant;
-- required environment and external artifacts;
-- objective pass/fail criteria;
-- technical evidence artifacts when useful.
+### 6. Define restart semantics
 
-Use exact commands when arguments or environment are part of what is being proven; otherwise identify the target and required result without freezing replaceable invocation syntax.
+Distinguish local implementation defects from design defects, evidence gaps, replaceable transport failures, and genuine external blockers. Two consecutive review failures for substantially the same validation/bookkeeping mechanism should return to design before a third cycle unless the defect is materially different.
 
-### 5. Keep evidence proportional
+### 7. Check overlap
 
-Capture enough technical evidence to support the decision or comparison being made. This may include dependency identity, configuration, commands, results, metrics, artifacts, and limitations.
+Inspect only plausibly overlapping open issues/PRs/branches. Link superseded work and summarize the material constraint instead of copying its history.
 
-Do not require elaborate provenance, immutable archives, hashes, or machine-readable manifests unless the task specifically needs them.
+## Publication readiness
 
-### 6. Add review checkpoints when they reduce risk
+Before assigning `execution-ready` or `queued`, confirm a fresh executor can act without design-session reasoning; terminology and outcome are unambiguous; material decisions and inputs are present; scope/invariants/failure behavior/acceptance are clear; validation is feasible; exploratory material was not silently promoted; no unnecessary project-wide machinery was invented; and no issue text grants the implementation executor merge authority.
 
-Add independent checkpoints only for distinct material risks such as architecture, ownership/lifetime, data integrity, numerical behavior, concurrency, security, backend execution, broad refactoring, or decision-driving performance evidence.
+For an epic parent also confirm every `child_issues` member exists, is intended, and has enough contract detail for first-run DAG generation; the parent itself contains no manually generated DAG; and the only parent workflow state is `execution-ready`.
 
-A checkpoint defines:
-
-- the covered outcome and target semantics;
-- material risks and acceptance criteria;
-- evidence to inspect or reproduce;
-- what would make progression unsafe.
-
-When the last checkpoint can inspect the complete final diff and all remaining acceptance criteria, it can be declared **final-capable**. A final-capable verdict is a technical gate to the ready-for-review handoff, not merge authorization.
-
-### 7. Define dependency and publication boundaries
-
-When work depends on external repositories, submodules, packages, generated artifacts, models, datasets, or other versioned inputs, specify the identity and update boundary needed for the current task. Do not require bookkeeping commits that add no technical value.
-
-### 8. Define restart semantics
-
-Distinguish:
-
-- local implementation defect: correct a bounded delta;
-- design defect: return to `design-required`;
-- evidence gap: return to `investigation-required`;
-- replaceable tool failure: use another transport or leave a precise handoff;
-- real blocker: no safe practical continuation exists.
-
-Two consecutive review failures for substantially the same validation, attestation, parser, documentation-sync, or bookkeeping mechanism should trigger design review before a third corrective cycle. This never waives a continuing material defect.
-
-### 9. Check overlap
-
-Inspect only plausibly overlapping open issues, PRs, branches, and recent attempts. Link superseded work and summarize its material constraint instead of copying its history.
-
-### 10. Explain the mechanism to the user in chat
-
-After the issue contract is complete, give the user a separate concise explanation of what will be built and how its important pieces interact when that explanation is useful.
-
-Do not repeat the issue field by field. Focus on concepts needed to understand the project and the decisions just made.
-
-## Execution-ready check
-
-Before marking the issue `execution-ready`, confirm:
-
-- a fresh executor can implement without design-session reasoning;
-- the observable outcome and terminology are unambiguous;
-- all material facts and decisions are present;
-- linked sources supplement rather than replace the contract;
-- scope, invariants, failure behavior, and acceptance are clear;
-- required inputs and validation capabilities are identified;
-- review checkpoints, if any, match distinct risks;
-- dependency and external-evidence boundaries are explicit when applicable;
-- exploratory material was not silently promoted to a settled requirement;
-- no unnecessary project-wide machinery was invented;
-- no user-oriented tutorial content was added merely for pedagogy;
-- no issue text grants the executor merge or auto-merge authority;
-- `execution-ready` is the issue's only state label.
-
-## Issue structure
+## Standalone/child issue structure
 
 ```markdown
 # <Outcome-oriented title>
 
 ## Readiness
-**Initial state:** execution-ready | design-required | investigation-required | blocked
+**Initial state:** execution-ready | queued | design-required | investigation-required | blocked
 
 ## Goal and current limitation
-<Observable outcome, why it matters, and current behavior.>
+<Observable outcome and current behavior.>
 
 ## Baseline and inputs
-<Material baseline facts, dependencies, artifacts, and defaults.>
+<Material facts, dependencies, artifacts, defaults.>
 
 ## Resolved technical contract
-<APIs, data/control flow, ownership, failure semantics, bounds, and concrete seams.>
+<APIs, data/control flow, ownership, failure semantics, bounds, concrete seams.>
 
 ## Scope
 ### In scope
@@ -231,13 +141,13 @@ Before marking the issue `execution-ready`, confirm:
 ### Invariants
 
 ## Validation and evidence
-<Required targets, cases, environment, artifacts, and objective gates.>
+<Required targets, cases, environment, artifacts, objective gates.>
 
-## Checkpoints
-<Only distinct material-risk checkpoints; mark the last one final-capable when applicable.>
+## Intermediate checkpoints
+<Only distinct material-risk checkpoints, if needed.>
 
 ## Delivery
-<PR shape, dependency/publication boundaries, ready-for-review handoff, and observable post-merge completion. Do not authorize executor merge.>
+<PR shape, publication boundaries, and ready-for-review handoff.>
 ```
 
-Add or split sections when technical completeness requires it.
+For an epic parent, keep the body smaller: goal/scope, scheduling/integration policy that is genuinely specific to the epic, and the seed contract above. Child technical contracts stay in the child issues.
