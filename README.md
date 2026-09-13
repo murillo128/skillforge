@@ -28,11 +28,15 @@ An epic is designed as a small parent seed plus self-contained child issues. The
 
 On the parent's first scheduler execution, `skills/codex-epic-scheduler/SKILL.md` reads all child contracts, derives the minimal direct dependency graph and serialization mutexes, validates it, initializes the integration branch when needed, and persists one canonical `codex-epic-dag:v1` parent comment. The parent then becomes `in-progress` and the scheduler activates the first deterministic dependency-ready wave.
 
-Later wake-ups reconstruct state from GitHub labels plus that canonical graph. Selected children receive canonical execution context (epic, integration branch, exact base SHA) before moving from `queued` to `execution-ready`. The scheduler itself never implements, reviews, or integrates child work.
+Later wake-ups reconstruct state from GitHub labels plus that canonical graph. Selected children receive canonical execution context (epic, integration branch, exact base SHA) before moving from `queued` to `execution-ready`.
+
+When every declared child is `completed`, the scheduler no longer stops with an indefinitely `in-progress` parent. It preserves the canonical epic integration branch, uses the ordinary parent branch `codex/issue-<parent>` as a finalization/staging branch, combines the current default branch with the completed epic result, creates or reuses one PR from that branch to the default branch, and hands the parent to `review-ready`. The scheduler still does not perform independent review or merge.
 
 ## Review and completion
 
 Ordinary executors stop at a ready PR plus `review-ready`. The final review is performed in a fresh isolated audit context through `codex-pr-audit`/`codex-independent-review`. A positive final-capable exact-head audit has standing authority to merge that exact head, expose `completed`, and close the controlling issue. Audit failure returns the issue to execution; integration drift returns it for reconciliation without fabricating a technical failure.
+
+The same audit path closes an epic's final aggregate PR. Because the finalization branch follows the normal `codex/issue-N` convention, no special auditor or separate merge mechanism is required.
 
 ## Optional derived wiki
 
