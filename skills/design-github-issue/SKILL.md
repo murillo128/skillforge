@@ -19,6 +19,20 @@ Start with `AGENTS.md` when present and the user request, roadmap item, or exist
 
 Do not promote exploratory notes, hypotheses, derived wiki text, or provisional chat conclusions into requirements unless an authoritative source explicitly adopts them.
 
+## Explicit activation holds
+
+An explicit user instruction not to activate work overrides all initial-state
+and publication defaults below. Preserve existing held labels when updating an
+issue. For a newly published, fully specified standalone issue or epic parent
+that must remain inactive, use `queued` and state that it awaits manual activation;
+this is an activation hold, not missing technical design. Keep its children
+`queued` too. Never add `execution-ready`, release a hold, initialize a DAG or
+launch a session merely because specification or executor selection is complete.
+Only a separate explicit authorization may activate that held parent/standalone
+issue. Do not place a manually held child under an active parent without an
+explicit non-executable workflow state: an active scheduler can activate `queued`
+children. The normal defaults below apply only when no explicit hold exists.
+
 ## Workflow states
 
 Use exactly one current workflow-state label:
@@ -43,6 +57,22 @@ Depending on the task, record the current limitation and observable goal; baseli
 Use precise names, paths, values, examples, and equations when they remove ambiguity. Do not copy generic Git, publication, label, audit, merge, or reporting procedure already owned by skills.
 
 The executor's normal successful delivery is a ready-for-review PR plus `review-ready`. Final independent review and verdict-derived completion belong to `codex-pr-audit`; do not make every issue define a duplicate final review checkpoint.
+
+## Executor and model selection
+
+Use `skills/execution-runner-selection/SKILL.md` when the user chooses local
+Codex or local Devin CLI. Record executor selection in a dedicated top-level
+`execution` TOML block. Keep optional Codex model/effort/profile in `codex`; local
+Devin accepts optional `model` in `devin`, not cloud mode/ACU fields or Codex effort.
+Without an executor override, preserve Codex and its native model settings.
+`docs/execution-runners.md` owns supported keys, local prerequisites and recovery.
+
+Each child and parent selects independently; there is no implicit epic inheritance.
+For a whole-epic request, intentionally set each requested child as well as the
+parent. Verify the local host, CLI authentication, worktree trust/permissions and
+model/GPU/test requirements. Devin runs locally in tmux, not through Cloud API.
+Changing selection is not activation or an active-session ownership transfer.
+Final independent audit remains Codex regardless of implementation executor.
 
 ## Epic child design
 
@@ -102,7 +132,7 @@ Never require evidence that the expected environment cannot practically produce 
 
 ### 5. Add only material intermediate checkpoints
 
-Use independent executor-side checkpoints only when work should not safely continue past a distinct architecture, ownership/lifetime, data integrity, numerical, concurrency, security, backend, or broad-refactor boundary without review. Do not add a final checkpoint merely because implementation ends; `codex-pr-audit` provides the final independent review after `review-ready`.
+Use independent executor-side checkpoints only when work should not safely continue past a distinct architecture, ownership/lifetime, data integrity, numerical, concurrency, security, backend, or broad-refactor boundary without review. Do not add a final checkpoint merely because implementation finished; `codex-pr-audit` provides the final independent review after `review-ready`.
 
 ### 6. Define restart semantics
 
