@@ -14,13 +14,15 @@ The canonical `murillo128/skillforge` template retains bootstrap and must never 
 
 Skillforge uses one public issue-state dispatcher: `.github/workflows/codex-issue-state.yml`. It is the only workflow that reacts to `issues:labeled` and routes state transitions to reusable internal workflows:
 
-- `execution-ready` launches/resumes the controlling issue through `.github/workflows/codex-execute-ready.yml`;
-- `review-ready` launches an isolated exact-head PR audit through `.github/workflows/codex-review-ready.yml`;
+- `execution-ready` launches/resumes the controlling issue through `.github/workflows/codex-execute-ready.yml` for native/explicit Codex, or `.github/workflows/devin-execute-ready.yml` for explicitly selected local Devin;
+- `review-ready` launches an isolated exact-head Codex PR audit through `.github/workflows/codex-review-ready.yml`, regardless of implementation executor;
 - `completed` or deliberately restored `queued` on an epic child wakes the unique active parent whose canonical DAG contains that child.
 
-The executor and auditor use a repository self-hosted runner labeled `codex` and the Codex App Server already shared with Desktop Remote Control. The dispatcher itself may run on GitHub-hosted infrastructure for control-plane routing.
+Both executors and the auditor use the repository self-hosted runner labeled `codex`; this is a physical host label, not an executor selection. Codex uses the App Server already shared with Desktop Remote Control; local Devin uses its installed CLI in isolated tmux sessions. The dispatcher itself may run on GitHub-hosted infrastructure for control-plane routing.
 
-Local runner infrastructure is optional. Without a matching self-hosted runner, the template remains valid but execution/audit jobs cannot run locally. `skills/codex-local-runner/SKILL.md` installs or repairs the repository-scoped runner only when explicitly requested; it never creates API keys or exposes inbound services.
+Local runner infrastructure is optional. Without a matching self-hosted runner, the template remains valid but execution/audit jobs cannot run locally. `skills/codex-local-runner/SKILL.md` installs or repairs the repository-scoped runner only when explicitly requested; it never creates API keys or exposes inbound services. Local Devin prerequisites belong to `skills/devin-local-runner/SKILL.md`.
+
+The same dispatcher handles issue closure by removing only the closed issue's registered implementation worktree and its associated detached PR-review worktrees, after active audit locks release. Branch refs are retained. This local cleanup is skipped in canonical SkillForge, which has no provisioned local runner; initialized repositories retain it.
 
 ## Epic DAG execution
 
@@ -43,3 +45,15 @@ The same audit path closes an epic's final aggregate PR. Because the finalizatio
 `skills/repository-wiki-curation/SKILL.md` maintains optional `wiki/**` derived from repository/GitHub evidence. The wiki is non-normative. The curator may publish only `wiki/**` directly to default branch after adversarial review and a fail-closed path boundary; actionable discrepancies go to GitHub issues labeled `curator-detected`.
 
 The core template remains generic. Project truth belongs in each repository created from it.
+
+## Execution runners and regression checks
+
+Epic/issue execution supports native Codex selection and explicitly selected local Devin, with independent fresh Codex audit. See [execution runners](docs/execution-runners.md) and [Codex operating policy](docs/codex-operations.md). Runner provisioning is opt-in and is never performed inside canonical SkillForge.
+
+Run offline regressions with Python 3.11+ and tmux:
+
+```sh
+REQUIRE_TMUX_TEST=1 python3 -m unittest discover -s .github/scripts -p "test_*.py" -v
+```
+
+These tests use temporary Git worktrees and fake model clients, not paid model calls or production runners. Import provenance is recorded in `.github/epic-sync-provenance.json`; the README also updates existing routing descriptions for both executors.

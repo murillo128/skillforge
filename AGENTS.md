@@ -117,3 +117,8 @@ Keep evidence proportional. Commit source, tests, configuration, small determini
 ## Project-specific additions
 
 Repositories created from the template should add only genuine domain-specific repository-wide invariants: language/runtime/coding constraints, ownership/lifetime/concurrency/security invariants, required validation paths, dependency/licensing constraints, hardware requirements, correctness/performance hard failures, or explicit planning authority. Keep reusable procedure in skills and task detail in issues.
+## Executor selection and terminal worktree cleanup
+
+Use `skills/execution-runner-selection/SKILL.md` for executor selection and `docs/execution-runners.md` for its contract. Native Codex remains the default; optional local Devin prerequisites belong to `skills/devin-local-runner/SKILL.md`. `docs/codex-operations.md` owns Codex model/effort/profile selection. Each parent/child selects independently. Configuration edits do not activate issues, release holds or migrate active sessions; final audit remains fresh independent Codex.
+
+The existing dispatcher also handles issue closure with narrowly scoped cleanup of that issue's registered implementation and detached PR-review worktrees after active audit locks release. It retains branch refs and preserves unrelated/open-issue work. Canonical SkillForge has no local runner and skips this cleanup; initialized repositories retain it. Cleanup grants no authority to launch a new model turn.
