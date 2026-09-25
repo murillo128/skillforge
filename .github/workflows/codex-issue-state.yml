@@ -154,6 +154,13 @@ jobs:
           worktree_root="${SKILLFORGE_WORKTREE_ROOT:-${HOME}/.skillforge/worktrees}"
           owner="${GITHUB_REPOSITORY%%/*}"
 
+          origin="$(git -C "$repo_root" remote get-url origin)"
+          case "$origin" in
+            "https://github.com/${GITHUB_REPOSITORY}"|"https://github.com/${GITHUB_REPOSITORY}.git"|"git@github.com:${GITHUB_REPOSITORY}"|"git@github.com:${GITHUB_REPOSITORY}.git"|"ssh://git@github.com/${GITHUB_REPOSITORY}"|"ssh://git@github.com/${GITHUB_REPOSITORY}.git") ;;
+            *) echo "Unexpected repository origin: $origin" >&2; exit 1 ;;
+          esac
+          git -C "$repo_root" fetch --no-tags origin "$GITHUB_SHA"
+
           cleanup_script="$RUNNER_TEMP/cleanup_issue_worktrees.py"
           git -C "$repo_root" show "${GITHUB_SHA}:.github/scripts/cleanup_issue_worktrees.py" > "$cleanup_script"
 
