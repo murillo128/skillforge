@@ -20,17 +20,6 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          repository: murillo128/nfl-world-model
-          ref: 9fc8e8f0636d4adf0160e9c0d0ecd500c4eb4b4d
-          path: source-nfl
-          persist-credentials: false
-          sparse-checkout: |
-            .github
-            .codex
-            skills
-            docs
-      - uses: actions/checkout@v4
-        with:
           repository: murillo128/llm-model-explorer
           ref: ce5bff20039d6dc2381852bbef07f77273e32553
           path: source-llm
@@ -43,87 +32,145 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Compare pinned sources and prepare scoped candidate
+      - name: Assemble pinned reusable sources and verify source hashes
         working-directory: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import base64
           import difflib
           import hashlib
           import json
           import os
           from pathlib import Path
+          import shutil
           import subprocess
+          from urllib.request import Request, urlopen
 
           root = Path.cwd()
-          nfl = root.parent / 'source-nfl'
           llm = root.parent / 'source-llm'
+          source = root.parent / 'source-assembled'
           output = Path(os.environ['RUNNER_TEMP']) / 'epic-sync-report'
           output.mkdir()
-          manifest = json.loads((nfl / '.github/sdd-upstream.json').read_text())
-          assert manifest['commit'] == 'ce5bff20039d6dc2381852bbef07f77273e32553'
-          paths = set(manifest['imported_paths']) | {
-              '.github/scripts/cleanup_issue_worktrees.py',
-              '.github/scripts/devin_host_broker.py',
-              '.github/scripts/devin_host_client.py',
-              '.github/scripts/test_worktree_cleanup.py',
-              '.github/scripts/test_epic_scheduler.py',
-          }
-          allowed_roots = {'.codex', '.github', 'skills', 'docs'}
+          shutil.copytree(llm, source, ignore=shutil.ignore_patterns('.git'))
+          def api(path):
+              request = Request('https://api.github.com/repos/murillo128/skillforge/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urlopen(request, timeout=60) as response:
+                  return json.load(response)
           def blob(data):
               return None if data is None else hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
-          rows = []
-          delta = []
-          for name in sorted(paths):
-              assert Path(name).parts[0] in allowed_roots and '..' not in Path(name).parts
-              source = (nfl / name).read_bytes()
-              target = (root / name).read_bytes() if (root / name).is_file() else None
-              upstream = (llm / name).read_bytes() if (llm / name).is_file() else None
-              category = 'unchanged' if target == source else ('shared-baseline' if upstream == source else 'nfl-delta')
-              rows.append({'path': name, 'category': category, 'skillforge_before': blob(target), 'llm_blob': blob(upstream), 'nfl_blob': blob(source)})
-              if upstream != source:
-                  delta.extend(difflib.unified_diff((upstream or b'').decode().splitlines(keepends=True), source.decode().splitlines(keepends=True), fromfile='llm/' + name, tofile='nfl/' + name))
-              if target != source:
-                  (root / name).parent.mkdir(parents=True, exist_ok=True)
-                  (root / name).write_bytes(source)
+          tree = api('git/trees/ba4a67cc8a42dda38fa7e2de2ac27e4b3a6ba9d1?recursive=1')
+          assert not tree.get('truncated')
+          for entry in tree['tree']:
+              if entry['type'] != 'blob':
+                  continue
+              name = entry['path']
+              assert Path(name).parts[0] in {'.sync', '.github', 'skills', 'docs'} and '..' not in Path(name).parts
+              assert entry['mode'] == '100644'
+              data = base64.b64decode(api('git/blobs/' + entry['sha'])['content'])
+              assert blob(data) == entry['sha']
+              (source / name).parent.mkdir(parents=True, exist_ok=True)
+              (source / name).write_bytes(data)
+          for change in json.loads((source / '.sync/patches.json').read_text()):
+              path = source / change['path']
+              text = path.read_text()
+              assert text.count(change['old']) == 1, change['path']
+              path.write_text(text.replace(change['old'], change['new']))
+          test_path = source / '.github/scripts/test_executor_routing.py'
+          text = test_path.read_text().split('class LocalPolicyTests', 1)[0]
+          text = text.replace('import devin_runner as runner\n', 'import devin_runner as runner\nimport devin_host_broker as host_broker\n')
+          test_path.write_text(text + (source / '.sync/test_executor_routing.tail').read_text())
 
-          # Keep reusable operating policy; do not turn one NFL host's history into
-          # canonical template facts. Do not import either application's AGENTS,
-          # README, bootstrap state, datasets or application workflows.
-          runners = root / 'docs/execution-runners.md'
-          text = runners.read_text()
-          start = text.find('\nOn 2026-09-25,')
-          end = text.find('\nCLI references', start)
-          assert start > 0 and end > start
-          text = text[:start] + '\n\nLive-host readiness, CLI flags and model availability must be verified separately\nfor the intended host/account. No application-specific live-session history is\nclaimed as validation of this template.\n' + text[end:]
-          runners.write_text(text)
-          operations = root / 'docs/codex-operations.md'
-          text = operations.read_text().replace(
-              'GPU training hosts and local caches are separate from the coding-agent selection;\nthe imported router does not select or provision a GPU training host.\n',
-              'Application compute hosts and local caches are separate from coding-agent\nselection; the router does not select or provision application infrastructure.\n')
-          text = text.replace('interrupt training, change power\nlimits or restart a host/server', 'interrupt workloads or restart a host/server')
-          operations.write_text(text)
+          expected = {
+              '.github/scripts/cleanup_issue_worktrees.py': 'db6eb613d405213bff644866f717aadce064f4d4',
+              '.github/scripts/devin_host_broker.py': '150f18237f8956e12721864b0b565e67f61c395e',
+              '.github/scripts/devin_host_client.py': '5c89a2a8fcb1f74d526dd8b8cff84f8a9021417e',
+              '.github/scripts/devin_runner.py': '27cafabb82fdd2fc272996ff31102235a99a759d',
+              '.github/scripts/test_executor_routing.py': 'b0e26517401fec347ba9435d1bc8c0d34426c49d',
+              '.github/scripts/test_worktree_cleanup.py': '2c82ed7393be13dd2f82ed1b21296439b1d72a5c',
+              '.github/scripts/test_epic_scheduler.py': '6872402165deee505108ded9bdedad89045ca8f4',
+              '.github/workflows/codex-issue-state.yml': '218dd30b30b06e614ba1fc6afa62b0fb79637301',
+              '.github/workflows/devin-execute-ready.yml': '722bdf2e00709ee92bc0b0dad9bf0b6d6d0f2f1f',
+              '.github/workflows/executor-routing-ci.yml': '704681e2d3bb6b13372824fc1b7e20a1cb6ed151',
+              'skills/codex-local-runner/SKILL.md': '6ccf344e4195003541066a70c14ad15bceca6ad8',
+              'skills/design-github-issue/SKILL.md': 'e9373c2912d6e863f05779f7e7e25be603d99f36',
+              'skills/devin-local-runner/SKILL.md': 'b12d1d7854f1589054e96bcf71212e6f015e41df',
+              'skills/execution-runner-selection/SKILL.md': '6efbdf78d849c9a828dccfb60cfae175b1c9ac2a',
+          }
+          for name, sha in expected.items():
+              observed = blob((source / name).read_bytes())
+              assert observed == sha, (name, observed, sha)
+          paths = set(expected) | {
+              '.codex/config.toml', '.github/actionlint.yaml',
+              '.github/scripts/codex_profile.py', '.github/scripts/executor_control.py',
+              '.github/scripts/find_epic_parent.py', '.github/scripts/local_issue_worktree.py',
+              '.github/scripts/prepare_pr_audit.py', '.github/scripts/test_codex_profile.py',
+              '.github/workflows/codex-execute-ready.yml', '.github/workflows/codex-review-ready.yml',
+              'docs/codex-operations.md', 'docs/execution-runners.md',
+              'skills/codex-epic-scheduler/SKILL.md', 'skills/codex-epic-scheduler/scripts/plan_wave.py',
+              'skills/codex-github-operations/SKILL.md', 'skills/codex-independent-review/SKILL.md',
+              'skills/codex-issue-orchestrator/SKILL.md', 'skills/codex-pr-audit/SKILL.md',
+              'skills/spec-driven-codex-loop/SKILL.md',
+          }
+          rows, delta = [], []
+          for name in sorted(paths):
+              data = (source / name).read_bytes()
+              before = (root / name).read_bytes() if (root / name).is_file() else None
+              baseline = (llm / name).read_bytes() if (llm / name).is_file() else None
+              category = 'unchanged' if before == data else ('shared-baseline' if baseline == data else 'nfl-delta')
+              if name.startswith('docs/'):
+                  category = 'generic-doc-adaptation'
+              rows.append({'path': name, 'category': category, 'skillforge_before': blob(before),
+                           'llm_blob': blob(baseline), 'import_blob': blob(data), 'nfl_blob_verified': expected.get(name)})
+              if baseline != data:
+                  delta.extend(difflib.unified_diff((baseline or b'').decode().splitlines(keepends=True), data.decode().splitlines(keepends=True), fromfile='llm/' + name, tofile='import/' + name))
+              if before != data:
+                  (root / name).parent.mkdir(parents=True, exist_ok=True)
+                  (root / name).write_bytes(data)
+
+          # Canonical SkillForge deliberately has no provisioned local runner.
+          route = root / '.github/workflows/codex-issue-state.yml'
+          text = route.read_text()
+          anchor = "    if: needs.route.outputs.cleanup_issue_number != ''"
+          assert text.count(anchor) == 1
+          route.write_text(text.replace(anchor, "    if: github.repository != 'murillo128/skillforge' && needs.route.outputs.cleanup_issue_number != ''"))
+          test = root / '.github/scripts/test_canonical_template.py'
+          test.write_text('''"""Canonical-template safety regression; no host/model calls."""
+          from pathlib import Path
+          import unittest
+
+          class CanonicalTemplateTests(unittest.TestCase):
+              def test_canonical_template_does_not_schedule_local_cleanup(self):
+                  source = (Path(__file__).resolve().parents[1] / "workflows/codex-issue-state.yml").read_text()
+                  cleanup = source.split("  cleanup-worktrees:\\n", 1)[1].split("  select-executor:\\n", 1)[0]
+                  self.assertIn("if: github.repository != 'murillo128/skillforge' && needs.route.outputs.cleanup_issue_number != ''", cleanup)
+                  self.assertIn("runs-on: [self-hosted, codex]", cleanup)
+
+          if __name__ == "__main__":
+              unittest.main()
+          ''')
+          ci = root / '.github/workflows/executor-routing-ci.yml'
+          ci.write_text(ci.read_text() + "      - name: Preserve canonical template host boundary\n        run: python3 -m unittest discover -s .github/scripts -p 'test_canonical_template.py' -v\n")
           agents = root / 'AGENTS.md'
-          text = agents.read_text()
-          anchor = '- optional local runner provisioning/repair: `skills/codex-local-runner/SKILL.md`;'
-          assert anchor in text
-          text = text.replace(anchor, anchor + '\n- executor/model selection: `skills/execution-runner-selection/SKILL.md`;\n- optional local Devin runner provisioning/repair: `skills/devin-local-runner/SKILL.md`;')
-          anchor = 'Keep this decision in agent instructions, not duplicated in the launcher workflow.'
-          assert anchor in text
-          text = text.replace(anchor, anchor + '\n\nExecutor selection is independent of model selection. Missing overrides retain native Codex behavior; an explicit local Devin selection changes implementation/scheduler execution, never the independent Codex audit. Read `docs/execution-runners.md` and `docs/codex-operations.md` for validated per-issue settings and host boundaries. Selection edits do not activate issues or release user holds.')
-          anchor = 'Duplicate/delayed scheduler wake-ups are expected and must remain idempotent.'
-          assert anchor in text
-          text = text.replace(anchor, anchor + '\n\nThe same dispatcher handles issue closure with narrowly scoped terminal worktree cleanup: only the closed issue\'s registered implementation worktree and its associated detached review worktrees, after the audit lock is released. Open-issue work is preserved and branch refs are retained. Cleanup is not permission to launch a new model turn.')
-          agents.write_text(text)
+          agents.write_text(agents.read_text() + '\n## Executor selection and terminal worktree cleanup\n\nUse `skills/execution-runner-selection/SKILL.md` for executor selection and `docs/execution-runners.md` for its contract. Native Codex remains the default; optional local Devin prerequisites belong to `skills/devin-local-runner/SKILL.md`. `docs/codex-operations.md` owns Codex model/effort/profile selection. Each parent/child selects independently. Configuration edits do not activate issues, release holds or migrate active sessions; final audit remains fresh independent Codex.\n\nThe existing dispatcher also handles issue closure with narrowly scoped cleanup of that issue\'s registered implementation and detached PR-review worktrees after active audit locks release. It retains branch refs and preserves unrelated/open-issue work. Canonical SkillForge has no local runner and skips this cleanup; initialized repositories retain it. Cleanup grants no authority to launch a new model turn.\n')
           readme = root / 'README.md'
-          readme.write_text(readme.read_text() + '\n## Execution runners and regression checks\n\nEpic/issue execution supports native Codex selection and explicitly selected local Devin, with independent fresh Codex audit. See [execution runners](docs/execution-runners.md) and [Codex operating policy](docs/codex-operations.md). Runner provisioning is opt-in and is never performed inside canonical SkillForge.\n\nRun the offline regression suite with Python 3.11+ and tmux:\n\n```sh\nREQUIRE_TMUX_TEST=1 python3 -m unittest discover -s .github/scripts -p "test_*.py" -v\n```\n\nThese tests use temporary Git worktrees and fake model clients, not paid model calls or production runners. Import provenance is recorded in `.github/epic-sync-provenance.json`.\n')
+          readme.write_text(readme.read_text() + '\n## Execution runners and regression checks\n\nEpic/issue execution supports native Codex selection and explicitly selected local Devin, with independent fresh Codex audit. See [execution runners](docs/execution-runners.md) and [Codex operating policy](docs/codex-operations.md). Runner provisioning is opt-in and is never performed inside canonical SkillForge.\n\nRun offline regressions with Python 3.11+ and tmux:\n\n```sh\nREQUIRE_TMUX_TEST=1 python3 -m unittest discover -s .github/scripts -p "test_*.py" -v\n```\n\nThese tests use temporary Git worktrees and fake model clients, not paid model calls or production runners. Import provenance is recorded in `.github/epic-sync-provenance.json`.\n')
           (root / '.github/workflows/prepare-epic-sync.yml').unlink()
+          for row in rows:
+              row['skillforge_after'] = blob((root / row['path']).read_bytes())
           provenance = {
-              'scope': 'Reusable epic execution skills, runners, workflows, and offline regressions',
+              'scope': 'Reusable epic execution skills, runners, workflows and offline regression tests',
               'skillforge_base': '747bf4766dec7c9e75384c31b601b5523b2dbb78',
-              'sources': {'murillo128/nfl-world-model': '9fc8e8f0636d4adf0160e9c0d0ecd500c4eb4b4d', 'murillo128/llm-model-explorer': 'ce5bff20039d6dc2381852bbef07f77273e32553'},
-              'adaptations': ['Preserve canonical SkillForge bootstrap, README and AGENTS; add only relevant generic routing.', 'Remove application-specific live-host/session observations and training terminology.', 'Do not import source-repository application code, data, application CI or local bootstrap state.'],
+              'sources': {'murillo128/nfl-world-model': '9fc8e8f0636d4adf0160e9c0d0ecd500c4eb4b4d',
+                          'murillo128/llm-model-explorer': 'ce5bff20039d6dc2381852bbef07f77273e32553'},
+              'adaptations': ['Keep canonical SkillForge bootstrap, README and AGENTS; append only relevant generic routing.',
+                  'Rewrite operations documentation generically; exclude all source live-host/session observations and application details.',
+                  'Skip closed-issue local cleanup in canonical SkillForge only; preserve behavior in initialized copies and add an offline regression.',
+                  'Do not import application code, datasets, source application CI or local bootstrap state.'],
               'comparison': rows,
           }
           (root / '.github/epic-sync-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
@@ -131,15 +178,14 @@ jobs:
           (output / 'nfl-vs-llm.patch').write_text(''.join(delta))
           subprocess.run(['git', 'add', '-A', '--', '.github', '.codex', 'skills', 'docs', 'README.md', 'AGENTS.md'], check=True)
           (output / 'skillforge.patch').write_text(subprocess.check_output(['git', 'diff', '--cached'], text=True))
+          for name in paths:
+              text = (root / name).read_text()
+              assert not any(word in text for word in ('nfl-world-model', '/usr/local/src', 'super-marlin', '#139', '#146', 'A4500', '4070')), name
           summary = ['## Pinned epic synchronization candidate', '', '| Path | Classification |', '| --- | --- |']
           summary += ['| `' + row['path'] + '` | ' + row['category'] + ' |' for row in rows]
-          summary += ['', 'Source repositories remain unchanged. Canonical bootstrap remains intact. No paid model calls or self-hosted runner launches.', '', '### Scope check']
-          hits = []
-          for name in paths:
-              for number, line in enumerate((root / name).read_text().splitlines(), 1):
-                  if any(word in line for word in ('nfl-world-model', '/usr/local/src', 'super-marlin', '#139', '#146', 'A4500', '4070')):
-                      hits.append(f'- `{name}:{number}`: {line}')
-          summary += hits or ['No application-specific host/session strings found in imported paths.']
+          summary += ['', 'Fourteen NFL-specific code/skill/workflow blobs verified byte-for-byte against pinned source.',
+                      'Source repositories remain unchanged. Canonical bootstrap remains intact. No paid model calls or self-hosted launches.',
+                      'Operations docs are generic adaptations. Canonical-only cleanup safeguard has its own regression.']
           (output / 'summary.md').write_text('\n'.join(summary) + '\n')
           print('\n'.join(summary))
           PY
@@ -167,7 +213,7 @@ jobs:
           set -euo pipefail
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
           "$(go env GOPATH)/bin/actionlint" -shellcheck= 2>&1 | tee "$RUNNER_TEMP/epic-sync-report/actionlint.log"
-      - name: Store validated candidate objects without moving any branch
+      - name: Store validated candidate without moving any branch
         working-directory: candidate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -181,13 +227,12 @@ jobs:
           from pathlib import Path
           import subprocess
           from urllib.request import Request, urlopen
-
           repo = os.environ['GITHUB_REPOSITORY']
           assert repo == 'murillo128/skillforge'
           def api(path, data=None):
               req = Request('https://api.github.com/repos/' + repo + '/' + path,
                   data=None if data is None else json.dumps(data).encode(),
-                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28'})
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'})
               with urlopen(req, timeout=60) as response:
                   return json.load(response)
           parent = os.environ['GITHUB_SHA']
@@ -204,11 +249,13 @@ jobs:
               sha = api('git/blobs', {'content': base64.b64encode(data).decode(), 'encoding': 'base64'})['sha']
               entries.append({'path': name, 'mode': mode, 'type': 'blob', 'sha': sha})
           tree = api('git/trees', {'base_tree': base_tree, 'tree': entries})['sha']
-          commit = api('git/commits', {'message': 'feat(epics): synchronize reusable execution deltas (#1)\n\nPreserve canonical bootstrap and native model selection. Import the shared LLM baseline and NFL-only runner, cleanup and activation-hold fixes with regression coverage. No branch updated by the preparation workflow.', 'tree': tree, 'parents': [parent]})['sha']
+          commit = api('git/commits', {'message': 'feat(epics): synchronize reusable execution deltas (#1)\n\nPreserve canonical bootstrap and native model selection. Import shared LLM prerequisites and NFL runner, cleanup and activation-hold fixes with offline regression coverage.', 'tree': tree, 'parents': [parent]})['sha']
           output = Path(os.environ['RUNNER_TEMP']) / 'epic-sync-report'
-          report = {'candidate_commit': commit, 'candidate_tree': tree, 'parent_commit': parent, 'changed_paths': len(entries), 'tests': (output / 'tests.log').read_text().splitlines()[-5:], 'workflow_syntax': 'actionlint v1.7.7 passed (shellcheck disabled)', 'branches_updated': False}
+          report = {'candidate_commit': commit, 'candidate_tree': tree, 'parent_commit': parent,
+                    'changed_paths': len(entries), 'tests': (output / 'tests.log').read_text().splitlines()[-5:],
+                    'workflow_syntax': 'actionlint v1.7.7 passed (shellcheck disabled)', 'branches_updated': False}
           (output / 'candidate.json').write_text(json.dumps(report, indent=2) + '\n')
-          body = (output / 'summary.md').read_text() + '\n### Validated unreferenced candidate\n```json\n' + json.dumps(report, indent=2) + '\n```\n\nThe temporary preparation workflow is absent from the candidate tree. Awaiting exact-head review/publication through the GitHub connector; main has not changed.\n'
+          body = (output / 'summary.md').read_text() + '\n### Validated unreferenced candidate\n```json\n' + json.dumps(report, indent=2) + '\n```\n\nTemporary preparation workflow is absent from candidate. Ready for exact-head review/publication via connector; main remains unchanged.\n'
           api('issues/1/comments', {'body': body})
           print(json.dumps(report, indent=2))
           PY
