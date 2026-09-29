@@ -153,7 +153,8 @@ def cleanup(repo_root, worktree_root, run_root, repository, issue_number, pr_num
 
     removed = []
     for path in dict.fromkeys(targets):
-        git(repo_root, "worktree", "remove", "--force", str(path))
+        # Never discard unfinished tracked, staged or untracked work.
+        git(repo_root, "worktree", "remove", str(path))
         removed.append(path)
 
     git(repo_root, "worktree", "prune")

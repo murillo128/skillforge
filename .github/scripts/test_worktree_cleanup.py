@@ -108,6 +108,36 @@ class WorktreeCleanupTests(unittest.TestCase):
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
 
+    def test_uncommitted_changes_block_cleanup(self):
+        for number, kind in enumerate(("modified", "staged", "untracked"), start=20):
+            with self.subTest(kind=kind):
+                issue = self.add_issue(number)
+                path = issue / ("untracked.txt" if kind == "untracked" else "tracked.txt")
+                path.write_text("unfinished work\n", encoding="utf-8")
+                if kind == "staged":
+                    run("git", "-C", issue, "add", "tracked.txt")
+                with self.assertRaises(cleanup_module.CleanupError):
+                    cleanup_module.cleanup(
+                        self.repo, self.worktree_root, self.run_root,
+                        self.repository, number, [], wait_seconds=0,
+                    )
+                self.assertEqual(path.read_text(encoding="utf-8"), "unfinished work\n")
+                self.assertIn(
+                    str(issue.resolve()),
+                    run("git", "-C", self.repo, "worktree", "list", "--porcelain").stdout,
+                )
+
+    def test_uncommitted_review_changes_block_cleanup(self):
+        review = self.add_review(34)
+        path = review / "review-notes.txt"
+        path.write_text("unpublished evidence\n", encoding="utf-8")
+        with self.assertRaises(cleanup_module.CleanupError):
+            cleanup_module.cleanup(
+                self.repo, self.worktree_root, self.run_root,
+                self.repository, 12, [34], wait_seconds=0,
+            )
+        self.assertEqual(path.read_text(encoding="utf-8"), "unpublished evidence\n")
+
 
 if __name__ == "__main__":
     unittest.main()
