@@ -125,3 +125,17 @@ Repositories created from the template should add only genuine domain-specific r
 Use `skills/execution-runner-selection/SKILL.md` for executor selection and `docs/execution-runners.md` for its contract. Native Codex remains the default; optional local Devin prerequisites belong to `skills/devin-local-runner/SKILL.md`. `docs/codex-operations.md` owns Codex model/effort/profile selection. Each parent/child selects independently. Configuration edits do not activate issues, release holds or migrate active sessions; final audit remains fresh independent Codex.
 
 The existing dispatcher also handles issue closure with narrowly scoped cleanup of that issue's registered implementation and detached PR-review worktrees after active audit locks release. It retains branch refs and preserves unrelated/open-issue work. Canonical SkillForge has no local runner and skips this cleanup; initialized repositories retain it. Cleanup grants no authority to launch a new model turn.
+
+## Efficient shell execution
+
+Prioritize the shortest total time to a correct result, not the fewest characters or the smallest output at any cost.
+
+- For routine shell operations, choose a direct command and execute it. Do not prepare a separate plan or compare equivalent alternatives.
+- Reuse existing project commands and available tools. Do not write helper scripts for simple operations.
+- Scope searches and reads to the necessary paths and data. Do not repeat queries unless the information may have changed.
+- Batch related checks when no intermediate decision is needed. Avoid both tiny separate calls and giant command chains.
+- Use Python when it is clearer and more reliable than a complicated pipeline. Do not force everything into a one-liner.
+- Avoid unnecessary `bash -c` layers, wrappers, temporary files, retries, and frequent polling.
+- Preserve errors, exit codes, and required checks. Simplifying must not hide failures or skip validation.
+
+These rules do not waive repository workflow, authorization, validation, or review requirements.
