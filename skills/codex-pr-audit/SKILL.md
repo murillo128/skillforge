@@ -33,17 +33,19 @@ Fail closed on ambiguous ownership, contradictory issue references, wrong workfl
 
 ## Exact target invariants
 
-A fresh audit targets the PR's current head at audit start. `audit_head` and `audit_base` are snapshots used to detect races, not caller-selectable historical targets. The review covers the complete PR diff `audit_base..audit_head`.
+A fresh audit targets the PR's current head at audit start. `audit_head` and `audit_base` are snapshots used to detect races, not caller-selectable historical targets. The review covers the complete PR diff from the unique merge base of `audit_base` and `audit_head` to `audit_head` (`git diff audit_base...audit_head`), plus the synthetic merge tree for integration evidence. Do not mistake unrelated base changes for PR reversions when the head is behind.
 
 Immediately before recording a verdict and again before verdict-derived mutation, re-read the PR and require the current head SHA to equal `audit_head`, the base ref to remain expected, and repository/issue ownership to remain unchanged.
 
 If the head moved, the verdict is stale: record at most one concise stale-attempt note, perform no verdict-derived mutation, and require a fresh audit of the new head.
 
-If the head is unchanged but the base branch tip moved from `audit_base`, distinguish normal forward integration drift from rewritten/ambiguous base history. Forward drift is executable reconciliation work, not technical `FAIL` and not `BLOCKED`: end the reviewer role, mark the PR draft if ready, replace `review-ready` with `execution-ready`, leave the issue open, and stop. The dispatcher relaunches the executor so it can reconcile, republish, and obtain fresh CI. Rewritten or ambiguous base history fails closed with a concise control-plane finding.
+If the head is unchanged but the base branch tip moved from `audit_base`, first apply [component isolation](../../docs/component-isolation.md) using the accepted-base planner, the original evidence base, current base and unchanged head. For `reuse_eligible: true`, retain the unchanged technical review, record the report and current validated integration base, and refresh the applicable CI gate without rewriting the PR or returning it to execution. Keep the original observed base and run identities for provenance; never repeatedly advance the baseline without proving the cumulative drift. This exception does not waive required current-target checks or the final publication/race boundary.
+
+Without that proof, distinguish normal forward integration drift from rewritten/ambiguous base history. Forward drift is executable reconciliation work, not technical `FAIL` and not `BLOCKED`: end the reviewer role, mark the PR draft if ready, replace `review-ready` with `execution-ready`, leave the issue open, and stop. The dispatcher relaunches the executor so it can reconcile, republish, and obtain fresh CI. Rewritten or ambiguous base history fails closed with a concise control-plane finding.
 
 ## Review phase
 
-Apply `codex-independent-review` exactly as written. Supply `AGENTS.md`, the controlling issue, PR number and exact `audit_base..audit_head`, required evidence, the applicable CI set and current results, and unresolved material findings.
+Apply `codex-independent-review` exactly as written. Supply `AGENTS.md`, the controlling issue, PR number and exact merge-base-to-head PR diff and base/head identities, required evidence, the applicable CI set and current results, and unresolved material findings.
 
 This invocation is the workflow's final technical review, so ask the reviewer to determine whether the exact target is **final-capable**: it must contain the complete final PR diff, final dependency revisions, required evidence, and all remaining acceptance criteria. The review returns exactly `PASS`, `PASS_WITH_NOTES`, `FAIL`, or `BLOCKED`, plus exact head, final-capable yes/no, evidence inspected/run, and findings.
 
@@ -75,6 +77,7 @@ Before changing PR or issue state, write one concise PR comment with this exact 
 **Verdict:** `<VERDICT>`
 **Final-capable:** `<yes-or-no>`
 **Validation/evidence:** <concise summary, including applicable CI run/check URLs, tested head/base or merge revision, attempts, terminal conclusions and justified non-applicability>
+**Integration compatibility:** <unchanged base, or original/current base, candidate trees, component fingerprints and environment from the accepted drift report>
 **Material findings:** <none or concise findings>
 **Non-blocking notes:** <none or concise notes; unresolved mandatory CI is never non-blocking>
 ```
@@ -92,22 +95,22 @@ Re-fetch the exact PR and controlling issue before applying any result. Positive
 | `FAIL` | Mark draft if ready | `review-ready` -> `execution-ready`; leave open | Returned to executor |
 | `BLOCKED` | Keep readiness | `review-ready` -> `blocked` only for genuine unavailable capability/evidence | Blocked with exact cause |
 
-Integration-base drift or a `dirty`/conflicting PR caused by base reconciliation is a control-plane return, not an extra reviewer verdict. Mark draft, return to `execution-ready`, and let the normal executor reconcile it.
+Unproven/affected integration-base drift or a `dirty`/conflicting PR caused by base reconciliation is a control-plane return, not an extra reviewer verdict. Mark draft, return to `execution-ready`, and let the normal executor reconcile it.
 
 ### Positive automatic completion
 
 For `PASS` or `PASS_WITH_NOTES`:
 
-1. require `final-capable: yes` and exact head/base equality;
+1. require `final-capable: yes`, exact head equality, and either the unchanged base or an eligible scoped report for the exact current integration base;
 2. require the PR still open and ready and the controlling issue solely `review-ready`;
 3. refresh the complete mandatory pre-merge CI gate, including current attempts and the actual PR test-merge revision where applicable; stop without merge unless it is satisfied;
-4. revalidate the current head and base tip, then merge exactly `audit_head` through `codex-github-operations` with an expected-head guard; never rewrite the reviewed head first or bypass pending/failed checks;
+4. revalidate the current head and base tip, then merge exactly `audit_head` through `codex-github-operations` with an expected-head guard and its supported final publication boundary; never rewrite the reviewed head first or bypass pending/failed checks;
 5. re-read the PR and require GitHub to report it actually merged;
 6. if the controlling issue is still open with sole state `review-ready`, replace that state with `completed` preserving unrelated labels;
 7. verify `completed` is observable — this event intentionally wakes an active epic scheduler when the issue is a DAG child;
 8. close the issue with completed resolution and verify it remains labeled `completed`;
 9. stop.
 
-If exact-head merge cannot complete, classify why. Integration drift/conflict returns to executor. Pending checks/mergeability with unchanged exact head/base leave the issue `review-ready` for later controller reconciliation. Use `BLOCKED` only for a genuine unavailable capability with no safe alternative. A server accepting an early merge is not evidence that this controller's CI gate passed.
+If exact-head merge cannot complete, classify why. Affected/unproven integration drift or conflicts return to the executor; proven independent drift refreshes the gate without discarding the unchanged technical review. Pending checks/mergeability with unchanged exact head/base leave the issue `review-ready` for later controller reconciliation. Use `BLOCKED` only for a genuine unavailable capability with no safe alternative. A server accepting an early merge is not evidence that this controller's CI gate passed.
 
 Never mark `completed` until GitHub reports the exact PR actually merged.

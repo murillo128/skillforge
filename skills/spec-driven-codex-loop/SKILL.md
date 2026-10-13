@@ -82,11 +82,13 @@ Preserve identities/provenance/licensing of submodules, vendored code, external 
 
 Prefer repository-native build/test/lint/type/evaluation/benchmark paths. Run required and risk-appropriate focused checks; record material deviations/environment limits; never claim an unrun check passed. Local implementation failures are corrected in scope rather than labeled external blockers.
 
+Use the accepted-base component plan in [component isolation](../../docs/component-isolation.md) to select changed components and transitive consumers, in addition to all branch/issue-required gates. Unknown/global inputs require full validation. Preserve exact run and environment identities.
+
 Any final integration rebase/conflict resolution creates a new candidate head. Rerun affected focused validation and obtain fresh exact-head CI/check evidence; do not reuse pre-rebase CI as final evidence.
 
 ### 5. Retain proportional evidence
 
-Keep enough technical evidence for the claim without committing bulky generated outputs/caches/binaries/datasets/traces unless explicitly required and distributable. Keep GitHub bookkeeping out of technical artifacts unless it is itself a test input.
+Keep enough technical evidence for the claim without committing bulky generated outputs/caches/binaries/datasets/artifacts unless explicitly required and distributable. Keep GitHub bookkeeping out of technical artifacts unless it is itself a test input.
 
 ### 6. Publish intentionally
 
@@ -99,13 +101,13 @@ This gate applies only with one valid canonical `integration_branch`, after cand
 1. Fetch current remote integration branch and remote issue branch. Capture integration tip and candidate/remote issue heads.
 2. Require issue still open with sole state `in-progress`, one matching PR targeting intended integration base, clean worktree, and remote issue head equal local candidate.
 3. If integration tip is already ancestor of candidate, no rewrite is needed. Otherwise require canonical `base_sha` still ancestor of integration tip.
-4. Ask `codex-github-operations` to rebase issue-owned commits onto exact integration tip and publish with an **exact old-head lease**; never force integration branch.
+4. Before rewriting, evaluate the accepted-base `drift` report under [component isolation](../../docs/component-isolation.md), using the base of completed validation, the current integration tip and unchanged head. If its input-equivalence and policy conditions hold, retain the head, attach the report, refresh applicable current-target checks and proceed to step 7 without a rebase. Otherwise ask `codex-github-operations` to rebase issue-owned commits onto the exact integration tip and publish with an **exact old-head lease**; never force the integration branch.
 5. Resolve conflicts only within issue authority; otherwise return to design.
 6. After rebase rerun affected validation and obtain fresh exact-head CI/checks while PR remains draft.
 7. Fetch integration branch again after required checks. If its tip changed, repeat.
-8. Gate is stable only when required evidence belongs to the current candidate and the integration tip is still the same tip used for stabilization.
+8. Gate is stable only when required evidence belongs to the current candidate or has the explicit scoped input-equivalence proof, and the integration tip is still the tip just validated. The proof never waives a required current-target check or the final merge/publication boundary.
 
-Do not busy-poll CI/branch state. Use normal blocking waits and recheck at material completion boundaries. Standalone issues skip this integration loop.
+Do not busy-poll CI/branch state. Use normal blocking waits and recheck at material completion boundaries. Standalone issues skip this epic-specific loop; their auditor uses the same component-aware base-drift classification against the default branch.
 
 ## Intermediate review checkpoints
 

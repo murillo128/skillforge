@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "global_paths": [
+    ".codex/",
+    ".github/actionlint.yaml",
+    "README.md",
+    "docs/",
+    "skills/codex-github-operations/",
+    "skills/codex-pr-audit/",
+    "skills/codex-independent-review/",
+    "skills/spec-driven-codex-loop/",
+    "skills/test-quality/"
+  ],
+  "components": {
+    "epics": {
+      "paths": [
+        "skills/codex-epic-scheduler/",
+        ".github/scripts/find_epic_parent.py",
+        ".github/scripts/test_epic_scheduler.py"
+      ],
+      "depends_on": [],
+      "checks": ["epics"]
+    },
+    "cleanup": {
+      "paths": [
+        ".github/scripts/cleanup_issue_worktrees.py",
+        ".github/scripts/test_worktree_cleanup.py"
+      ],
+      "depends_on": [],
+      "checks": ["cleanup"]
+    },
+    "runners": {
+      "paths": [
+        ".github/scripts/codex_profile.py",
+        ".github/scripts/devin_host_broker.py",
+        ".github/scripts/devin_host_client.py",
+        ".github/scripts/devin_runner.py",
+        ".github/scripts/executor_control.py",
+        ".github/scripts/local_issue_worktree.py",
+        ".github/scripts/prepare_pr_audit.py",
+        ".github/scripts/test_codex_profile.py",
+        ".github/scripts/test_executor_routing.py",
+        ".github/scripts/test_canonical_template.py",
+        "skills/codex-local-runner/",
+        "skills/devin-local-runner/",
+        "skills/execution-runner-selection/"
+      ],
+      "depends_on": [],
+      "checks": ["routing", "profiles", "template"]
+    }
+  }
+}

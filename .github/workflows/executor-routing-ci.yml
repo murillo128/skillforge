@@ -3,56 +3,95 @@ name: Executor routing regression checks
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/scripts/**'
-      - 'skills/codex-epic-scheduler/**'
-      - 'skills/codex-local-runner/**'
-      - 'skills/devin-local-runner/**'
-      - 'skills/execution-runner-selection/**'
-      - '.github/workflows/*execute-ready.yml'
-      - '.github/workflows/codex-issue-state.yml'
-      - '.github/workflows/codex-review-ready.yml'
-      - '.github/workflows/executor-routing-ci.yml'
   pull_request:
-    paths:
-      - '.github/scripts/**'
-      - 'skills/codex-epic-scheduler/**'
-      - 'skills/codex-local-runner/**'
-      - 'skills/devin-local-runner/**'
-      - 'skills/execution-runner-selection/**'
-      - '.github/workflows/*execute-ready.yml'
-      - '.github/workflows/codex-issue-state.yml'
-      - '.github/workflows/codex-review-ready.yml'
-      - '.github/workflows/executor-routing-ci.yml'
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Keep this stable required-check name. Never omit the whole workflow by paths.
   offline-regressions:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Plan checks from trusted base policy and complete Git diff
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          TEST_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import tempfile
+
+          checks = ('routing', 'profiles', 'cleanup', 'epics', 'template', 'components')
+          base, head = os.environ.get('BASE_SHA', ''), os.environ['TEST_SHA']
+          report = {'full': True, 'reason': 'bootstrap-or-unavailable-base', 'head': head}
+          selected = dict.fromkeys(checks, True)
+          if re.fullmatch(r'[0-9a-f]{40}', base) and base != '0' * 40:
+              source = subprocess.run(
+                  ['git', 'show', f'{base}:.github/scripts/component_impact.py'],
+                  capture_output=True)
+              if source.returncode == 0:
+                  with tempfile.TemporaryDirectory() as directory:
+                      trusted = Path(directory) / 'component_impact.py'
+                      trusted.write_bytes(source.stdout)
+                      spec = importlib.util.spec_from_file_location('trusted_impact', trusted)
+                      planner = importlib.util.module_from_spec(spec)
+                      spec.loader.exec_module(planner)
+                      report = planner.plan(Path.cwd(), base, head)
+                      selected = planner.ci_selection(report)
+          if set(selected) != set(checks) or any(type(v) is not bool for v in selected.values()):
+              raise SystemExit('Incomplete or invalid CI selection')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for check in checks:
+                  print(f'{check}={str(selected[check]).lower()}', file=output)
+          Path('component-plan.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report, indent=2))
+          PY
       - name: Ensure real tmux transport is exercised
+        if: steps.plan.outputs.routing == 'true'
         run: |
           if ! command -v tmux >/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y tmux
           fi
       - name: Test routing, real Git worktrees and tmux with a fake local CLI
+        if: steps.plan.outputs.routing == 'true'
         env:
           REQUIRE_TMUX_TEST: '1'
         run: python3 -m unittest discover -s .github/scripts -p 'test_executor_routing.py' -v
       - name: Preserve native Codex lifecycle behavior
+        if: steps.plan.outputs.profiles == 'true'
         run: python3 -m unittest discover -s .github/scripts -p 'test_codex_profile.py' -v
       - name: Test closed-issue worktree cleanup
+        if: steps.plan.outputs.cleanup == 'true'
         run: python3 -m unittest discover -s .github/scripts -p 'test_worktree_cleanup.py' -v
       - name: Validate deterministic epic waves and canonical parent discovery
+        if: steps.plan.outputs.epics == 'true'
         run: python3 -m unittest discover -s .github/scripts -p 'test_epic_scheduler.py' -v
       - name: Preserve canonical template host boundary
+        if: steps.plan.outputs.template == 'true'
         run: python3 -m unittest discover -s .github/scripts -p 'test_canonical_template.py' -v
+      - name: Validate component selection and actual Git input equivalence
+        run: python3 -m unittest discover -s .github/scripts -p 'test_component_impact.py' -v
+      - name: Record applicable validation
+        run: cat component-plan.json >> "$GITHUB_STEP_SUMMARY"

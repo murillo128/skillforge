@@ -113,9 +113,17 @@ Keep evidence proportional. Commit source, tests, configuration, small determini
 - Do not rewrite shared valid history without explicit authority. The standing exception is the executor-owned `codex/issue-N` branch, before `review-ready`, using the exact-old-head `--force-with-lease` integration-rebase protocol.
 - Direct commits to default branch require explicit user instruction except the narrow wiki-curator authority and one-time bootstrap authority.
 - An implementation workflow ends with a ready PR and `review-ready` handoff to audit.
-- Before handoff, an epic child executor performs the final integration-freshness gate: if integration advances, reconcile/revalidate/republish and require fresh exact-head CI until stable.
+- Before handoff, an epic child executor performs the final integration-freshness gate: if integration advances, prove independent component drift under `docs/component-isolation.md` or reconcile/revalidate/republish; required current-target checks remain mandatory.
 - Replacing `in-progress` with `review-ready` is the executor's final GitHub mutation. Afterward only local teardown/bookkeeping/response composition is allowed until another controller returns it to execution.
 - Outside the positive `codex-pr-audit` path, merge requires a later explicit user-facing instruction after review finds no material blocker.
+
+## Component isolation
+
+When selecting CI, assessing base drift, designing component boundaries or deriving epic mutexes, read `docs/component-isolation.md`. The optional `.skillforge/components.json` is accepted input/consumer metadata, not permission to skip unknown paths or required checks. Use the planner and manifest from the accepted base; changes to either cannot exempt themselves.
+
+Independent forward base movement may preserve an unchanged PR head, technical review and input-equivalent scoped evidence through the role skills' component-aware path. Changed heads, affected dependencies, global/unknown inputs and uncertain environments retain conservative reconciliation. Never fabricate green statuses, bypass branch protection or treat a head-only merge guard as atomic protection of the base. Existing merge authority, publication races and independent-review boundaries remain in force.
+
+For epic initialization, mutexes represent genuine conflicting writes or exclusive resources, not merely repository membership or read-only dependencies. Do not rewrite an existing canonical DAG to optimize it. During bootstrap, adapt the template's infrastructure map explicitly to the actual project; unconfigured application paths require full native application validation.
 
 ## Project-specific additions
 
